@@ -1,0 +1,18 @@
+@import "tailwindcss";
+
+@theme {
+  --color-app: #0E1117;
+  --color-panel: #161B22;
+  --color-subtle: #21262D;
+  --color-primary: #E6EDF3;
+  --color-secondary: #8B949E;
+  --color-accent: #2F81F7;
+}
+
+@layer base {
+  body {
+    @apply bg-app text-primary;
+    height: 100vh;
+    overflow: hidden;
+  }
+}
