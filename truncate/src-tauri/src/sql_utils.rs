@@ -101,3 +101,13 @@ pub fn validate_sql_structure(sql: &str, sql_type: &SqlType) -> Result<(), Strin
     }
     Ok(())
 }
+
+/// Splits the SQL string by semicolons and returns the last non-empty statement.
+/// This ensures we only execute one statement at a time, similar to a terminal default behavior.
+pub fn get_last_statement(sql: &str) -> Option<String> {
+    sql.split(';')
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .last()
+        .map(|s| s.to_string())
+}

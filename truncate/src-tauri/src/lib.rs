@@ -3,7 +3,77 @@ use sqlx::mysql::{MySqlPoolOptions, MySqlConnectOptions, MySqlRow};
 use sqlx::{Row, Column, TypeInfo, ValueRef};
 use std::time::Duration;
 use crate::db_state::{DbState, ConnectionConfig};
-use crate::sql_utils::{get_sql_type, extract_db_name, is_safe_for_mvp, has_limit_clause, validate_sql_structure, SqlType};
+use crate::sql_utils::{get_sql_type, extract_db_name, is_safe_for_mvp, has_limit_clause, validate_sql_structure, get_last_statement, SqlType};
+
+// ... existing code ...
+
+#[tauri::command]
+async fn sql_run_query(
+    window: tauri::Window,
+    state: State<'_, DbState>,
+    sql: String,
+) -> Result<QueryResult, String> {
+    // 0. Extract Last Statement (Multi-statement handling)
+    let sql_to_run = match get_last_statement(&sql) {
+        Some(s) => s,
+        None => return Err("No query to execute".to_string()),
+    };
+
+    let sql_type = get_sql_type(&sql_to_run);
+
+    // 1. Safety Check
+    if !is_safe_for_mvp(&sql_type) {
+        return Err("Destructive queries (UPDATE, DELETE, DROP, etc.) are disabled in this version.".into());
+    }
+
+    // 2. Handle USE command
+    if sql_type == SqlType::Use {
+        if let Some(db_name) = extract_db_name(&sql_to_run) {
+            switch_db_internal(&state, &db_name).await?;
+            window.emit("db-switched", &db_name)
+                .map_err(|e| format!("Failed to emit event: {}", e))?;
+            return Ok(QueryResult::Success(format!("Active database switched to: {}", db_name)));
+        } else {
+            return Err("Invalid USE command syntax".into());
+        }
+    }
+
+    // 3. Handle SELECT / SHOW / DESCRIBE
+    let pool = {
+        let guard = state.pool.lock().unwrap();
+        guard.as_ref().ok_or("No active database selected")?.clone()
+    };
+
+    // Normalize SQL: trim whitespace and remove trailing semicolon
+    let mut normalized_sql = sql_to_run.trim().to_string();
+    if normalized_sql.ends_with(';') {
+        normalized_sql.pop();
+    }
+    
+    // 4. Validate SQL Structure (e.g. SELECT needs FROM)
+    // IMPORTANT: Perform after normalization but before execution
+    if let Err(e) = validate_sql_structure(&normalized_sql, &sql_type) {
+        return Err(e);
+    }
+
+    let mut final_sql = normalized_sql.clone();
+    let mut was_limited = false;
+
+    if sql_type == SqlType::Select {
+        if !has_limit_clause(&normalized_sql) {
+            final_sql.push_str(" LIMIT 1000");
+            was_limited = true;
+        }
+    }
+
+    let rows: Vec<MySqlRow> = sqlx::query(&final_sql)
+        .fetch_all(&pool)
+        .await
+        .map_err(|e| format!("Query failed: {}", e))?;
+
+    let preview = map_rows_to_preview(rows, was_limited)?;
+    Ok(QueryResult::ResultSet(preview))
+}
 
 pub mod db_state;
 pub mod sql_utils;
@@ -149,67 +219,7 @@ async fn mysql_preview_table(
     map_rows_to_preview(rows, true)
 }
 
-#[tauri::command]
-async fn sql_run_query(
-    window: tauri::Window,
-    state: State<'_, DbState>,
-    sql: String,
-) -> Result<QueryResult, String> {
-    let sql_type = get_sql_type(&sql);
 
-    // 1. Safety Check
-    if !is_safe_for_mvp(&sql_type) {
-        return Err("Destructive queries (UPDATE, DELETE, DROP, etc.) are disabled in this version.".into());
-    }
-
-    // 2. Handle USE command
-    if sql_type == SqlType::Use {
-        if let Some(db_name) = extract_db_name(&sql) {
-            switch_db_internal(&state, &db_name).await?;
-            window.emit("db-switched", &db_name)
-                .map_err(|e| format!("Failed to emit event: {}", e))?;
-            return Ok(QueryResult::Success(format!("Active database switched to: {}", db_name)));
-        } else {
-            return Err("Invalid USE command syntax".into());
-        }
-    }
-
-    // 3. Handle SELECT / SHOW / DESCRIBE
-    let pool = {
-        let guard = state.pool.lock().unwrap();
-        guard.as_ref().ok_or("No active database selected")?.clone()
-    };
-
-    // Normalize SQL: trim whitespace and remove trailing semicolon
-    let mut normalized_sql = sql.trim().to_string();
-    if normalized_sql.ends_with(';') {
-        normalized_sql.pop();
-    }
-    
-    // 4. Validate SQL Structure (e.g. SELECT needs FROM)
-    // IMPORTANT: Perform after normalization but before execution
-    if let Err(e) = validate_sql_structure(&normalized_sql, &sql_type) {
-        return Err(e);
-    }
-
-    let mut final_sql = normalized_sql.clone();
-    let mut was_limited = false;
-
-    if sql_type == SqlType::Select {
-        if !has_limit_clause(&normalized_sql) {
-            final_sql.push_str(" LIMIT 1000");
-            was_limited = true;
-        }
-    }
-
-    let rows: Vec<MySqlRow> = sqlx::query(&final_sql)
-        .fetch_all(&pool)
-        .await
-        .map_err(|e| format!("Query failed: {}", e))?;
-
-    let preview = map_rows_to_preview(rows, was_limited)?;
-    Ok(QueryResult::ResultSet(preview))
-}
 
 // Helper to map rows to TablePreview
 fn map_rows_to_preview(rows: Vec<MySqlRow>, limited: bool) -> Result<TablePreview, String> {
