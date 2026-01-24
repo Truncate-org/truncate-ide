@@ -85,3 +85,19 @@ pub fn has_limit_clause(sql: &str) -> bool {
     let upper = normalized.to_uppercase();
     upper.split_whitespace().any(|word| word == "LIMIT")
 }
+
+pub fn validate_sql_structure(sql: &str, sql_type: &SqlType) -> Result<(), String> {
+    if matches!(sql_type, SqlType::Select) {
+        let normalized = sql.replace('\n', " ").replace('\r', " ");
+        let upper = normalized.to_uppercase();
+        
+        // Simple check for FROM clause
+        // Split by whitespace to ensure whole word matching
+        let has_from = upper.split_whitespace().any(|word| word == "FROM");
+        
+        if !has_from {
+            return Err("Invalid SQL: SELECT statements must include a FROM clause.".to_string());
+        }
+    }
+    Ok(())
+}

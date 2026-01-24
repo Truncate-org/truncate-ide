@@ -1,19 +1,59 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useDatabaseStore } from '../../store/databaseStore';
+import Editor, { useMonaco } from '@monaco-editor/react';
 
 const SqlEditor: React.FC = () => {
     const { runQuery, isConnected, activeDatabase, previewState } = useDatabaseStore();
     const [sql, setSql] = useState('');
+    const monaco = useMonaco();
+
+    // Define theme on load
+    useEffect(() => {
+        if (monaco) {
+            monaco.editor.defineTheme('truncate-dark', {
+                base: 'vs-dark',
+                inherit: true,
+                rules: [
+                    { token: 'keyword', foreground: 'FF7B72' },      // Red/Coral
+                    { token: 'operator.sql', foreground: 'FF7B72' }, // Operators often same as keywords
+                    { token: 'string', foreground: 'A5D6FF' },       // Light Blue
+                    { token: 'string.quote', foreground: 'A5D6FF' },
+                    { token: 'number', foreground: 'FFA657' },       // Orange
+                    { token: 'comment', foreground: '8B949E' },      // Muted Gray
+                    { token: 'predefined', foreground: 'D2A8FF' },   // Functions (Purple)
+                    { token: 'identifier', foreground: 'C9D1D9' },   // Default text
+                    { token: '', foreground: 'C9D1D9' }              // Fallback
+                ],
+                colors: {
+                    'editor.background': '#0D1117',
+                    'editor.foreground': '#C9D1D9',
+                    'editorCursor.foreground': '#C9D1D9',
+                    'editor.lineHighlightBackground': '#161b22',
+                    'editorLineNumber.foreground': '#484f58',
+                    'editorLineNumber.activeForeground': '#c9d1d9',
+                    'editor.selectionBackground': '#1f6feb40',
+                }
+            });
+            monaco.editor.setTheme('truncate-dark');
+        }
+    }, [monaco]);
 
     const handleRun = () => {
         if (!sql.trim()) return;
         runQuery(sql);
     };
 
-    const handleKeyDown = (e: React.KeyboardEvent) => {
-        if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+    // Handle CMD+Enter
+    // Monaco has its own keybindings, but for app-wide consistency/simplicity 
+    // we can use the onMount event to add a command, or just use a wrapper handler?
+    // A wrapper handler on the container might miss focus events.
+    // Better to use onMount to add the keybinding to the editor instance.
+    const handleEditorDidMount = (editor: any, monacoInstance: any) => {
+        editor.addCommand(monacoInstance.KeyMod.CtrlCmd | monacoInstance.KeyCode.Enter, () => {
             handleRun();
-        }
+        });
+
+        // Also ensure we focus properly or handle layout
     };
 
     return (
@@ -28,18 +68,39 @@ const SqlEditor: React.FC = () => {
                     <span className="mr-1">▶</span> Run
                 </button>
             </div>
-            <div className="flex-1 p-0 relative">
-                <textarea
+            <div className="flex-1 p-0 relative overflow-hidden">
+                <Editor
+                    height="100%"
+                    defaultLanguage="sql"
                     value={sql}
-                    onChange={(e) => setSql(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    className="w-full h-full bg-transparent text-primary font-mono text-[13px] leading-6 p-4 resize-none focus:outline-none placeholder-gray-600"
-                    placeholder={activeDatabase ? "Write SQL queries here..." : "Select a database or type 'USE <db_name>'; to start."}
-                    spellCheck={false}
+                    onChange={(value) => setSql(value || '')}
+                    theme="truncate-dark"
+                    onMount={handleEditorDidMount}
+                    options={{
+                        minimap: { enabled: false }, // Cleaner look for smaller panels
+                        fontSize: 13,
+                        fontFamily: "'JetBrains Mono', 'Menlo', 'Monaco', 'Courier New', monospace",
+                        lineHeight: 20,
+                        padding: { top: 16, bottom: 16 },
+                        scrollBeyondLastLine: false,
+                        automaticLayout: true,
+                        wordWrap: 'on',
+                        renderLineHighlight: 'all',
+                        contextmenu: true,
+                    }}
+                // Placeholder logic isn't built-in to Monaco the same way as textarea,
+                // but we can add a simple overlay if sql is empty, or just rely on the editor.
+                // VS Code usually just shows an empty file.
                 />
-                <div className="absolute bottom-2 right-4 text-xs text-secondary opacity-50 pointer-events-none">
-                    CMD + Enter to run
-                </div>
+                {/* Only show "placeholder" if completely empty and not focused? 
+                     Actually, standard IDEs don't usually have placeholders in the editor area.
+                     The status bar or prompt can guide them.
+                     I'll stick to a clean editor. */ }
+                {!sql && !activeDatabase && (
+                    <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-secondary opacity-20 pointer-events-none text-center">
+                        <p>Select a database to start</p>
+                    </div>
+                )}
             </div>
         </div>
     );

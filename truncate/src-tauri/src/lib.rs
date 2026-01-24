@@ -3,7 +3,7 @@ use sqlx::mysql::{MySqlPoolOptions, MySqlConnectOptions, MySqlRow};
 use sqlx::{Row, Column, TypeInfo, ValueRef};
 use std::time::Duration;
 use crate::db_state::{DbState, ConnectionConfig};
-use crate::sql_utils::{get_sql_type, extract_db_name, is_safe_for_mvp, has_limit_clause, SqlType};
+use crate::sql_utils::{get_sql_type, extract_db_name, is_safe_for_mvp, has_limit_clause, validate_sql_structure, SqlType};
 
 pub mod db_state;
 pub mod sql_utils;
@@ -184,6 +184,12 @@ async fn sql_run_query(
     let mut normalized_sql = sql.trim().to_string();
     if normalized_sql.ends_with(';') {
         normalized_sql.pop();
+    }
+    
+    // 4. Validate SQL Structure (e.g. SELECT needs FROM)
+    // IMPORTANT: Perform after normalization but before execution
+    if let Err(e) = validate_sql_structure(&normalized_sql, &sql_type) {
+        return Err(e);
     }
 
     let mut final_sql = normalized_sql.clone();
