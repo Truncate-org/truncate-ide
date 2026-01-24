@@ -3,7 +3,7 @@ import { useDatabaseStore, TablePreview } from '../../store/databaseStore';
 import { Loader2, AlertCircle, Table as TableIcon } from 'lucide-react';
 
 const DataResultsView: React.FC = () => {
-    const { previewState, previewData, previewError, activeTable } = useDatabaseStore();
+    const { previewState, previewData, previewError } = useDatabaseStore();
 
     // 1. Idle State
     if (previewState === 'idle') {
@@ -41,9 +41,25 @@ const DataResultsView: React.FC = () => {
         // Case A: Success Message (Non-row result)
         if (previewData.type === 'Success') {
             return (
-                <div className="flex flex-col h-full items-center justify-center text-green-400 select-none p-4 text-center">
-                    <p className="font-semibold mb-2">Success</p>
-                    <p className="text-sm opacity-80">{previewData.data as string}</p>
+                <div className="flex flex-col h-full bg-editor-bg">
+                    {/* Status Banner */}
+                    <div className="h-8 bg-green-500/10 border-b border-green-500/20 flex items-center px-4 justify-between animate-in fade-in slide-in-from-top-1 duration-200">
+                        <div className="flex items-center text-xs text-green-400 font-medium">
+                            <span className="mr-2">✔</span>
+                            Query executed successfully
+                        </div>
+                        {previewData.executionDuration !== undefined && (
+                            <span className="text-[10px] uppercase tracking-wider text-green-500/60 font-mono">
+                                {previewData.executionDuration}ms
+                            </span>
+                        )}
+                    </div>
+
+                    <div className="flex-1 flex flex-col items-center justify-center text-center p-8 select-none">
+                        <div className="p-4 rounded-lg bg-surface-secondary/50 border border-subtle/50 mb-4 max-w-md">
+                            <p className="text-sm text-secondary font-mono">{previewData.data as string}</p>
+                        </div>
+                    </div>
                 </div>
             );
         }
@@ -62,16 +78,34 @@ const DataResultsView: React.FC = () => {
 
             return (
                 <div className="flex flex-col h-full">
-                    <div className="h-10 border-b border-subtle flex items-center px-4 font-semibold text-primary select-none bg-surface-secondary justify-between">
-                        <div className="flex items-center">
-                            <TableIcon className="w-4 h-4 mr-2" />
-                            Preview: {activeTable || 'Query Result'}
+                    <div className="bg-surface-secondary">
+                        {/* Status Header */}
+                        <div className="h-8 border-b border-subtle flex items-center px-3 justify-between bg-editor-bg">
+                            <div className="flex items-center text-xs text-green-400">
+                                <span className="mr-2">✔</span>
+                                <span className="font-medium">Query executed successfully</span>
+                            </div>
+                            {previewData.executionDuration !== undefined && (
+                                <div className="flex items-center space-x-3">
+                                    <span className="text-[10px] uppercase tracking-wider text-green-500/50 font-mono">
+                                        {previewData.executionDuration}ms
+                                    </span>
+                                </div>
+                            )}
                         </div>
-                        {tableData.limited && (
-                            <span className="text-[10px] uppercase tracking-wider text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
-                                Result limited to 1000 rows
-                            </span>
-                        )}
+
+                        {/* Result Meta Bar */}
+                        <div className="h-9 border-b border-subtle flex items-center px-4 font-semibold text-primary select-none justify-between">
+                            <div className="flex items-center">
+                                <TableIcon className="w-4 h-4 mr-2 text-secondary" />
+                                <span className="text-xs">Result: {tableData.rows.length} rows</span>
+                            </div>
+                            {tableData.limited && (
+                                <span className="text-[10px] uppercase tracking-wider text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                                    Limited to 1000
+                                </span>
+                            )}
+                        </div>
                     </div>
                     <div className="flex-1 overflow-auto bg-editor-bg">
                         <table className="w-full text-left border-collapse">

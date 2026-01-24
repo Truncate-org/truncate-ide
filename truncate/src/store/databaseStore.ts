@@ -11,7 +11,16 @@ export interface TablePreview {
 export interface QueryResult {
     type: 'ResultSet' | 'Success';
     data: TablePreview | string;
+    executionDuration?: number;
 }
+
+const stripSqlComments = (sql: string): string => {
+    // Basic stripping (improve with parser if needed later)
+    return sql
+        .replace(/--.*$/gm, '') // Remove single-line comments
+        .replace(/\/\*[\s\S]*?\*\//g, '') // Remove multi-line comments
+        .trim();
+};
 
 export type PreviewState = 'idle' | 'loading' | 'result' | 'error';
 
@@ -161,8 +170,31 @@ export const useDatabaseStore = create<DatabaseStore>((set, get) => ({
             activeTable: null // clear active table highlight for custom query
         });
 
+        // 1. Strip comments
+        const cleanSql = stripSqlComments(sql);
+
+        // 2. Check if empty
+        if (!cleanSql) {
+            set({
+                previewState: 'result',
+                previewData: {
+                    type: 'Success',
+                    data: 'No executable SQL found.',
+                    executionDuration: 0
+                }
+            });
+            return;
+        }
+
+        const startTime = performance.now();
+
         try {
-            const result = await invoke<QueryResult>('sql_run_query', { sql });
+            const result = await invoke<QueryResult>('sql_run_query', { sql: cleanSql });
+            const endTime = performance.now();
+            const duration = Math.round(endTime - startTime);
+
+            // Inject duration into result (hacky since backend doesn't return it yet, but effective)
+            result.executionDuration = duration;
 
             set({
                 previewState: 'result',
