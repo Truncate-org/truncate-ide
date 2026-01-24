@@ -4,6 +4,7 @@ import DatabaseExplorer from '../Panels/DatabaseExplorer.tsx';
 import DataResultsView from '../Panels/DataResultsView.tsx';
 import SqlEditor from '../Panels/SqlEditor.tsx';
 import AiAssistant from '../Panels/AiAssistant.tsx';
+import StatusBar from '../StatusBar.tsx';
 
 const ResizableLayout: React.FC = () => {
     // Custom Handle Component for consistent look and feel
@@ -22,57 +23,60 @@ const ResizableLayout: React.FC = () => {
 
     return (
         <div className="h-screen w-screen bg-app text-sm font-sans flex flex-col overflow-hidden">
-            <PanelGroup orientation="horizontal" id="ide-layout-persistence">
-                {/* Left Panel: Database Explorer 
+            <div className="flex-1 flex overflow-hidden">
+                <PanelGroup orientation="horizontal" id="ide-layout-persistence">
+                    {/* Left Panel: Database Explorer 
                     Constraints: Min 180px, Max 320px
                 */}
-                <Panel
-                    defaultSize={20}
-                    minSize="180px"
-                    maxSize="320px"
-                    className="bg-panel flex flex-col"
-                    id="left-panel"
-                >
-                    <DatabaseExplorer />
-                </Panel>
+                    <Panel
+                        defaultSize={20}
+                        minSize="180px"
+                        maxSize="320px"
+                        className="bg-panel flex flex-col"
+                        id="left-panel"
+                    >
+                        <DatabaseExplorer />
+                    </Panel>
 
-                <HandleV />
+                    <HandleV />
 
-                {/* Center Panel Container */}
-                <Panel minSize={30}>
-                    <PanelGroup orientation="vertical">
-                        {/* Center Top: Results View */}
-                        <Panel defaultSize={70} minSize={30} className="bg-app flex flex-col">
-                            <DataResultsView />
-                        </Panel>
+                    {/* Center Panel Container */}
+                    <Panel minSize={30}>
+                        <PanelGroup orientation="vertical">
+                            {/* Center Top: Results View */}
+                            <Panel defaultSize={70} minSize={30} className="bg-app flex flex-col">
+                                <DataResultsView />
+                            </Panel>
 
-                        <HandleH />
+                            <HandleH />
 
-                        {/* Center Bottom: SQL Editor 
+                            {/* Center Bottom: SQL Editor 
                             Constraints: Min 180px (approx 20% of 900px height, passing percentage minSize allows resize)
                         */}
-                        <Panel defaultSize={30} minSize="180px" className="bg-panel flex flex-col">
-                            <SqlEditor />
-                        </Panel>
-                    </PanelGroup>
-                </Panel>
+                            <Panel defaultSize={30} minSize="180px" className="bg-panel flex flex-col">
+                                <SqlEditor />
+                            </Panel>
+                        </PanelGroup>
+                    </Panel>
 
-                <HandleV />
+                    <HandleV />
 
-                {/* Right Panel: AI Assistant 
+                    {/* Right Panel: AI Assistant 
                     Constraints: Min 280px, Max 420px
                 */}
-                <Panel
-                    defaultSize={25}
-                    minSize="280px"
-                    maxSize="420px"
-                    className="bg-panel flex flex-col"
-                    id="right-panel"
-                >
-                    <AiAssistant />
-                </Panel>
-            </PanelGroup>
-        </div>
+                    <Panel
+                        defaultSize={25}
+                        minSize="280px"
+                        maxSize="420px"
+                        className="bg-panel flex flex-col"
+                        id="right-panel"
+                    >
+                        <AiAssistant />
+                    </Panel>
+                </PanelGroup>
+            </div>
+            <StatusBar />
+        </div >
     );
 };
 

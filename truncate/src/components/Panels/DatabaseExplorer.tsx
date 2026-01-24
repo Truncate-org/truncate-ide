@@ -1,7 +1,7 @@
 import React from 'react';
 import { useDatabaseStore } from '../../store/databaseStore';
 import { ConnectionCard } from './ConnectionCard';
-import { Database, Table, Play, Power, XCircle, ArrowLeft } from 'lucide-react';
+import { Database, Table, Play, Power, ArrowLeft } from 'lucide-react';
 import clsx from 'clsx';
 
 const DatabaseExplorer: React.FC = () => {

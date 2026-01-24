@@ -1,10 +1,19 @@
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 
-interface TablePreview {
+export interface TablePreview {
     columns: string[];
     rows: string[][];
+    limited?: boolean;
 }
+
+export interface QueryResult {
+    type: 'ResultSet' | 'Success';
+    data: TablePreview | string;
+}
+
+export type PreviewState = 'idle' | 'loading' | 'result' | 'error';
 
 interface DatabaseStore {
     // Connection State
@@ -19,20 +28,24 @@ interface DatabaseStore {
     tables: string[];
     activeTable: string | null;
 
-    // Data State
-    tableData: TablePreview | null;
-    isLoadingData: boolean;
-    dataError: string | null;
+    // Preview / Data State
+    previewState: PreviewState;
+    previewData: QueryResult | null;
+    previewError: string | null;
 
     // Actions
     connectServer: (host: string, port: number, user: string, pass: string) => Promise<void>;
     selectDatabase: (dbName: string) => Promise<void>;
     selectTable: (dbName: string, tableName: string) => Promise<void>;
+    runQuery: (sql: string) => Promise<void>;
     closeDatabase: () => void;
     disconnect: () => void;
+
+    // Internal
+    initializeListeners: () => void;
 }
 
-export const useDatabaseStore = create<DatabaseStore>((set) => ({
+export const useDatabaseStore = create<DatabaseStore>((set, get) => ({
     isConnected: false,
     isConnecting: false,
     connectionError: null,
@@ -43,9 +56,37 @@ export const useDatabaseStore = create<DatabaseStore>((set) => ({
     tables: [],
     activeTable: null,
 
-    tableData: null,
-    isLoadingData: false,
-    dataError: null,
+    previewState: 'idle',
+    previewData: null,
+    previewError: null,
+
+    initializeListeners: () => {
+        // Listen for backend db-switched events
+        listen<string>('db-switched', async (event) => {
+            const dbName = event.payload;
+            const currentActive = get().activeDatabase;
+
+            // Only update if different to avoid redundant fetches if triggered by UI
+            if (dbName !== currentActive) {
+                console.log(`[Store] DB Sync Event: Switched to ${dbName}`);
+                // Update active DB state and reset preview
+                set({
+                    activeDatabase: dbName,
+                    activeTable: null,
+                    previewState: 'idle',
+                    previewData: null,
+                    previewError: null
+                });
+                // Fetch tables for the new DB
+                try {
+                    const tables = await invoke<string[]>('mysql_list_tables', {});
+                    set({ tables });
+                } catch (e) {
+                    console.error("Failed to fetch tables after sync:", e);
+                }
+            }
+        });
+    },
 
     connectServer: async (host, port, user, pass) => {
         set({ isConnecting: true, connectionError: null });
@@ -57,6 +98,7 @@ export const useDatabaseStore = create<DatabaseStore>((set) => ({
                 isConnecting: false,
                 connectionUser: user
             });
+            get().initializeListeners(); // Start listening
         } catch (error: any) {
             set({
                 connectionError: error.toString(),
@@ -68,38 +110,82 @@ export const useDatabaseStore = create<DatabaseStore>((set) => ({
     },
 
     selectDatabase: async (dbName) => {
-        set({ activeDatabase: dbName, tables: [], activeTable: null, tableData: null });
+        // Reset preview on DB switch
+        set({
+            activeDatabase: dbName,
+            tables: [],
+            activeTable: null,
+            previewState: 'idle',
+            previewData: null,
+            previewError: null
+        });
+
         try {
             await invoke('mysql_select_database', { databaseName: dbName });
             const tables = await invoke<string[]>('mysql_list_tables', {});
             set({ tables });
         } catch (error: any) {
             console.error("Failed to select DB:", error);
-            // We don't reset activeDatabase immediately to allow retries or show error in UI?
-            // But valid flow implies we should probably properly handle this.
+            set({ previewState: 'error', previewError: error.toString() });
         }
     },
 
     selectTable: async (dbName, tableName) => {
-        set({ activeTable: tableName, isLoadingData: true, dataError: null });
+        set({
+            activeTable: tableName,
+            previewState: 'loading',
+            previewError: null
+        });
+
         try {
+            // Re-use mysql_preview_table but treat it as a query result
             const data = await invoke<TablePreview>('mysql_preview_table', { databaseName: dbName, tableName });
-            set({ tableData: data, isLoadingData: false });
+
+            set({
+                previewState: 'result',
+                previewData: { type: 'ResultSet', data }
+            });
         } catch (error: any) {
             set({
-                dataError: error.toString(),
-                isLoadingData: false,
-                tableData: null
+                previewState: 'error',
+                previewError: error.toString(),
+                previewData: null
+            });
+        }
+    },
+
+    runQuery: async (sql) => {
+        set({
+            previewState: 'loading',
+            previewError: null,
+            activeTable: null // clear active table highlight for custom query
+        });
+
+        try {
+            const result = await invoke<QueryResult>('sql_run_query', { sql });
+
+            set({
+                previewState: 'result',
+                previewData: result
+            });
+        } catch (error: any) {
+            set({
+                previewState: 'error',
+                previewError: error.toString(),
+                previewData: null
             });
         }
     },
 
     closeDatabase: () => {
+        invoke('sql_disconnect_database').catch(() => { });
         set({
             activeDatabase: null,
             tables: [],
             activeTable: null,
-            tableData: null
+            previewState: 'idle',
+            previewData: null,
+            previewError: null
         });
     },
 
@@ -110,7 +196,9 @@ export const useDatabaseStore = create<DatabaseStore>((set) => ({
             activeDatabase: null,
             tables: [],
             activeTable: null,
-            tableData: null,
+            previewState: 'idle',
+            previewData: null,
+            previewError: null,
             connectionUser: null
         });
     }
