@@ -88,14 +88,7 @@ const SqlEditor: React.FC = () => {
                         renderLineHighlight: 'all',
                         contextmenu: true,
                     }}
-                // Placeholder logic isn't built-in to Monaco the same way as textarea,
-                // but we can add a simple overlay if sql is empty, or just rely on the editor.
-                // VS Code usually just shows an empty file.
                 />
-                {/* Only show "placeholder" if completely empty and not focused? 
-                     Actually, standard IDEs don't usually have placeholders in the editor area.
-                     The status bar or prompt can guide them.
-                     I'll stick to a clean editor. */ }
                 {!sql && !activeDatabase && (
                     <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-secondary opacity-20 pointer-events-none text-center">
                         <p>Select a database to start</p>
