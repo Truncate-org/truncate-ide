@@ -13,11 +13,6 @@ pub struct TablePreview {
 }
 
 #[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
-}
-
-#[tauri::command]
 async fn mysql_connect_server(
     state: State<'_, DbState>,
     host: String,
@@ -185,7 +180,6 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(DbState::new())
         .invoke_handler(tauri::generate_handler![
-            greet,
             mysql_connect_server,
             mysql_select_database,
             mysql_list_tables,

@@ -11,6 +11,7 @@ interface DatabaseStore {
     isConnected: boolean;
     isConnecting: boolean;
     connectionError: string | null;
+    connectionUser: string | null;
 
     // Schema State
     databases: string[];
@@ -27,6 +28,7 @@ interface DatabaseStore {
     connectServer: (host: string, port: number, user: string, pass: string) => Promise<void>;
     selectDatabase: (dbName: string) => Promise<void>;
     selectTable: (dbName: string, tableName: string) => Promise<void>;
+    closeDatabase: () => void;
     disconnect: () => void;
 }
 
@@ -34,6 +36,7 @@ export const useDatabaseStore = create<DatabaseStore>((set) => ({
     isConnected: false,
     isConnecting: false,
     connectionError: null,
+    connectionUser: null,
 
     databases: [],
     activeDatabase: null,
@@ -51,7 +54,8 @@ export const useDatabaseStore = create<DatabaseStore>((set) => ({
             set({
                 isConnected: true,
                 databases,
-                isConnecting: false
+                isConnecting: false,
+                connectionUser: user
             });
         } catch (error: any) {
             set({
@@ -90,6 +94,15 @@ export const useDatabaseStore = create<DatabaseStore>((set) => ({
         }
     },
 
+    closeDatabase: () => {
+        set({
+            activeDatabase: null,
+            tables: [],
+            activeTable: null,
+            tableData: null
+        });
+    },
+
     disconnect: () => {
         set({
             isConnected: false,
@@ -97,7 +110,8 @@ export const useDatabaseStore = create<DatabaseStore>((set) => ({
             activeDatabase: null,
             tables: [],
             activeTable: null,
-            tableData: null
+            tableData: null,
+            connectionUser: null
         });
     }
 }));

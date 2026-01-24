@@ -8,8 +8,8 @@ const DataResultsView: React.FC = () => {
     if (!activeTable) {
         return (
             <div className="flex flex-col h-full items-center justify-center text-secondary select-none">
-                <TableIcon className="w-12 h-12 mb-4 opacity-20" />
-                <p>Select a table to view data</p>
+                <TableIcon className="w-8 h-8 mb-3 opacity-10" />
+                <p className="text-xs text-gray-500">Select a table to view data</p>
             </div>
         );
     }
@@ -17,8 +17,8 @@ const DataResultsView: React.FC = () => {
     if (isLoadingData) {
         return (
             <div className="flex flex-col h-full items-center justify-center text-secondary select-none">
-                <Loader2 className="w-8 h-8 mb-4 animate-spin text-blue-500" />
-                <p>Loading data for {activeTable}...</p>
+                <Loader2 className="w-6 h-6 mb-3 animate-spin text-blue-500" />
+                <p className="text-sm text-gray-400">Loading table preview…</p>
             </div>
         );
     }
