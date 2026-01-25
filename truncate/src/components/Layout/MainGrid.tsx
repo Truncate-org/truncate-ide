@@ -1,7 +1,7 @@
 import React from 'react';
 import DatabaseExplorer from '../Panels/DatabaseExplorer.tsx';
 import DataResultsView from '../Panels/DataResultsView.tsx';
-import SqlEditor from '../Panels/SqlEditor.tsx';
+import TerminalPanel from '../Panels/TerminalPanel.tsx';
 import AiAssistant from '../Panels/AiAssistant.tsx';
 
 const MainGrid: React.FC = () => {
@@ -20,7 +20,7 @@ const MainGrid: React.FC = () => {
                 </div>
                 {/* Center Bottom */}
                 <div className="h-[200px] bg-panel overflow-hidden shrink-0">
-                    <SqlEditor />
+                    <TerminalPanel />
                 </div>
             </div>
 

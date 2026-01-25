@@ -1,24 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { Panel, Group as PanelGroup, Separator as PanelResizeHandle } from 'react-resizable-panels';
 import DatabaseExplorer from '../Panels/DatabaseExplorer.tsx';
 import DataResultsView from '../Panels/DataResultsView.tsx';
-import SqlEditor from '../Panels/SqlEditor.tsx';
 import TerminalPanel from '../Panels/TerminalPanel.tsx';
 import AiAssistant from '../Panels/AiAssistant.tsx';
 import StatusBar from '../StatusBar.tsx';
-import { useDatabaseStore } from '../../store/databaseStore.ts';
 
 const ResizableLayout: React.FC = () => {
-    const [activeTab, setActiveTab] = useState<'editor' | 'terminal'>('editor');
-    const isConnected = useDatabaseStore(state => state.isConnected);
-
-    // Auto-open terminal on connect
-    useEffect(() => {
-        if (isConnected) {
-            setActiveTab('terminal');
-        }
-    }, [isConnected]);
-
     // Custom Handle Component for consistent look and feel
     // Hit area increased to 8px for easier grabbing
     const HandleV = () => (
@@ -66,30 +54,7 @@ const ResizableLayout: React.FC = () => {
                             Constraints: Min 180px
                         */}
                             <Panel defaultSize={40} minSize="180px" className="bg-panel flex flex-col">
-                                {/* Tab Bar */}
-                                <div className="flex border-b border-subtle bg-sidebar">
-                                    <button
-                                        className={`px-4 py-1.5 text-xs font-medium border-r border-subtle hover:bg-hover ${activeTab === 'editor' ? 'bg-panel text-accent' : 'text-faded'}`}
-                                        onClick={() => setActiveTab('editor')}
-                                    >
-                                        SQL Editor
-                                    </button>
-                                    <button
-                                        className={`px-4 py-1.5 text-xs font-medium border-r border-subtle hover:bg-hover ${activeTab === 'terminal' ? 'bg-panel text-accent' : 'text-faded'}`}
-                                        onClick={() => setActiveTab('terminal')}
-                                    >
-                                        Terminal
-                                    </button>
-                                </div>
-
-                                <div className="flex-1 relative overflow-hidden">
-                                    <div className={`h-full w-full ${activeTab === 'editor' ? 'block' : 'hidden'}`}>
-                                        <SqlEditor />
-                                    </div>
-                                    <div className={`h-full w-full ${activeTab === 'terminal' ? 'block' : 'hidden'}`}>
-                                        <TerminalPanel />
-                                    </div>
-                                </div>
+                                <TerminalPanel />
                             </Panel>
                         </PanelGroup>
                     </Panel>

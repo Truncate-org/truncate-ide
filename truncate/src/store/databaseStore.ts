@@ -55,6 +55,8 @@ interface DatabaseStore {
     exportResult: ExportResult | null;
     exportSchema: () => Promise<void>;
     clearExportStatus: () => void;
+    refreshDatabases: () => Promise<void>;
+    refreshTables: () => Promise<void>;
 
     // Internal
     initializeListeners: () => void;
@@ -282,6 +284,32 @@ export const useDatabaseStore = create<DatabaseStore>((set, get) => ({
 
     clearExportStatus: () => {
         set({ exportState: 'idle', exportResult: null });
+    },
+
+    refreshDatabases: async () => {
+        if (!get().isConnected) return;
+        try {
+            const databases = await invoke<string[]>('mysql_refresh_databases');
+            // Check if active DB was dropped?
+            // If active DB is not in new list, maybe deselect it?
+            // For now, simple list update is safer.
+            set({ databases });
+        } catch (error) {
+            console.error("[Store] Failed to refresh databases:", error);
+        }
+    },
+
+    refreshTables: async () => {
+        const { isConnected, activeDatabase } = get();
+        if (!isConnected || !activeDatabase) return;
+
+        try {
+            // We reuse the existing list_tables command which uses the active connection state
+            const tables = await invoke<string[]>('mysql_list_tables');
+            set({ tables });
+        } catch (error) {
+            console.error("[Store] Failed to refresh tables:", error);
+        }
     }
 }));
 

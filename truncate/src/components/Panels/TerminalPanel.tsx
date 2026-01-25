@@ -5,8 +5,33 @@ import 'xterm/css/xterm.css';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { useDatabaseStore } from '../../store/databaseStore';
+import { Unlock, Terminal as TerminalIcon, ShieldAlert, AlertTriangle } from 'lucide-react';
 
 const DANGEROUS_REGEX = /\b(DROP|TRUNCATE|DELETE(\s+FROM)?(?!\s+WHERE)|UPDATE(\s+\w+)?(?!\s+SET\s+.*\s+WHERE))\b/i;
+
+// VS Code Dark Modern Colors
+const THEME = {
+    background: '#181818',
+    foreground: '#cccccc',
+    cursor: '#ffffff',
+    selection: '#264f78',
+    black: '#000000',
+    red: '#cd3131',
+    green: '#0dbc79',
+    yellow: '#e5e510',
+    blue: '#2472c8',
+    magenta: '#bc3fbc',
+    cyan: '#11a8cd',
+    white: '#e5e5e5',
+    brightBlack: '#666666',
+    brightRed: '#f14c4c',
+    brightGreen: '#23d18b',
+    brightYellow: '#f5f543',
+    brightBlue: '#3b8eea',
+    brightMagenta: '#d670d6',
+    brightCyan: '#29b8db',
+    brightWhite: '#e5e5e5',
+};
 
 export default function TerminalPanel() {
     const terminalRef = useRef<HTMLDivElement>(null);
@@ -18,7 +43,10 @@ export default function TerminalPanel() {
     const [inputBuffer, setInputBuffer] = useState('');
 
     // Use global store for connection status
-    const { isConnected, activeDatabase } = useDatabaseStore();
+    const { isConnected, activeDatabase, refreshDatabases, refreshTables, selectDatabase } = useDatabaseStore();
+
+    // Track pending actions based on executed commands
+    const pendingActionRef = useRef<{ type: 'DB_REFRESH' | 'TABLE_REFRESH' | 'DB_SWITCH', payload?: string } | null>(null);
 
     useEffect(() => {
         if (!terminalRef.current) return;
@@ -26,12 +54,14 @@ export default function TerminalPanel() {
         // 1. Initialize Terminal
         const term = new Terminal({
             cursorBlink: true,
-            fontFamily: '"Menlo", "Monaco", "Courier New", monospace',
-            fontSize: 14,
-            theme: {
-                background: '#1e1e1e',
-                foreground: '#d4d4d4',
-            }
+            fontFamily: "'JetBrains Mono', 'Menlo', 'Monaco', 'Consolas', 'Courier New', monospace",
+            fontSize: 13,
+            lineHeight: 1.4,
+            letterSpacing: 0,
+            theme: THEME,
+            allowProposedApi: true,
+            smoothScrollDuration: 100,
+            scrollback: 5000,
         });
 
         const fitAddon = new FitAddon();
@@ -42,83 +72,69 @@ export default function TerminalPanel() {
         xtermRef.current = term;
         fitAddonRef.current = fitAddon;
 
-        // 2. Handle Input (Safety Layer)
+        // 2. Handle Input (Safety Layer + Command Detection)
         term.onData(async (data) => {
-            // Only allow input if effectively connected (though terminal might exist before)
-            // Actually, store `isConnected` is the truth. 
-            // We might want to block input if not connected via check inside here, 
-            // OR rely on the fact that if backend process isn't running, writes fail/do nothing.
-            // But better to check.
-            if (!useDatabaseStore.getState().isConnected) return; // Access latest without dep cycle? or Ref.
+            if (!useDatabaseStore.getState().isConnected) return;
 
             if (data === '\r') { // Enter key
-                handleEnter();
-            } else if (data === '\u007F') { // Backspace
-                setInputBuffer(prev => prev.slice(0, -1));
-                await invoke('write_terminal', { id: 'term-1', data });
+                handleEnter(term);
             } else {
-                if (data.length === 1 && data.charCodeAt(0) >= 32) {
+                if (data === '\u007F') { // Backspace
+                    setInputBuffer(prev => prev.slice(0, -1));
+                } else if (data.length === 1 && data.charCodeAt(0) >= 32) {
                     setInputBuffer(prev => prev + data);
                 }
-
-                // Read-Only check for echo/typing?
-                // "Terminal defaults to READ-ONLY mode" -> Does that mean NO typing? 
-                // "Any keystroke is allowed, BUT Enter is blocked..." -> from previous plan.
-                // Requirement 6: "Default terminal mode = READ-ONLY".
-                // Requirement 2: "Terminal Must Be FULLY WRITABLE" implies we can type.
-                // So Read-Only refers to *Dangerous Execution Prevention* primarily, 
-                // OR strictly blocking all writes?
-                // "Write operations are blocked... User must toggle Write Mode".
-                // Let's stick to the previous interpretation: Allow typing, block DANGEROUS execution if in read-only?
-                // Wait, previous request said: "Terminal starts in READ-ONLY mode... Write operations are blocked".
-                // Let's implement Strict Read-Only: Block ALL input if readOnly is true?
-                // But user needs to be able to type SELECT queries... 
-                // "READ-ONLY" usually means "No Modification Queries". 
-                // It does NOT mean "You cannot type SELECT".
-                // So strict blocking is bad.
-                // Let's Stick to: Allow typing. Intercept ENTER.
-
-                // Check ReadOnly before sending to backend?
-                // If I type `SELECT 1`, I want to send it.
-                // If I type `DROP`, I want to confirm.
-
-                // Re-reading Req 6: "Intercept command and check for DROP... If detected: Block... Only forward if user explicitly confirms".
-                // Req Read-Only Mode: "Terminal starts in READ-ONLY mode... Write operations are blocked... User must toggle".
-                // This implies a Global Guard. 
-                // Current approach (Safety Check on Dangerous Regex) is robust. 
-                // The "Read-Only Mode" toggle acts as a "Safety Override" or "Strict Lock"?
-                // Let's make it:
-                // 1. Always allow typing.
-                // 2. On Enter:
-                //    a. If Dangerous Regex -> Show Warning.
-                //    b. If Safe Regex -> Execute.
-
-                // But wait, "Read-Only Mode (Default)" in Req 6 might mean "Safe Mode (Default)".
-                // Let's assume ReadOnly = "Safety Checks Active". If you turn it OFF, maybe checks are disabled? 
-                // Or maybe ReadOnly means "I promise not to write".
-                // Let's stick to: Always Check Dangerous. 
-                // AND if ReadOnly is ON, maybe block `INSERT/UPDATE` even if regex misses? 
-                // Or just use the Regex as the definition of "Write Operation".
-
                 await invoke('write_terminal', { id: 'term-1', data });
             }
         });
 
+        // 3. Handle Output (Success Detection)
         const unlisten = listen('terminal-output', (event: any) => {
             const [id, data] = event.payload;
             if (id === 'term-1') {
                 term.write(data);
+
+                // Analyze output for success confirmation
+                // We check specifically for MySQL standard success messages
+                if (typeof data === 'string') {
+                    if (data.includes("Query OK")) {
+                        // DDL Success
+                        const action = pendingActionRef.current;
+                        if (action) {
+                            console.log("[Terminal] Success detected. Triggering action:", action.type);
+                            if (action.type === 'DB_REFRESH') refreshDatabases();
+                            if (action.type === 'TABLE_REFRESH') refreshTables();
+                            // Clear action after triggering
+                            pendingActionRef.current = null;
+                        }
+                    } else if (data.includes("Database changed")) {
+                        // USE command success
+                        const action = pendingActionRef.current;
+                        if (action && action.type === 'DB_SWITCH' && action.payload) {
+                            console.log("[Terminal] Switch detected. Syncing UI to:", action.payload);
+                            selectDatabase(action.payload).catch(console.error);
+                            pendingActionRef.current = null;
+                        }
+                    } else if (data.includes("ERROR")) {
+                        // If error, clear pending action so we don't trigger on next success randomly
+                        if (pendingActionRef.current) {
+                            console.log("[Terminal] Command failed. clearing pending action.");
+                            pendingActionRef.current = null;
+                        }
+                    }
+                }
             }
         });
 
         // Resize observer
         const resizeObserver = new ResizeObserver(() => {
-            fitAddon.fit();
-            // If connected...
-            const dims = fitAddon.proposeDimensions();
-            if (dims && isConnected) { // isConnected from closure might be stale? 
-                invoke('resize_terminal', { id: 'term-1', rows: dims.rows, cols: dims.cols });
-            }
+            requestAnimationFrame(() => {
+                fitAddon.fit();
+                const dims = fitAddon.proposeDimensions();
+                if (dims && useDatabaseStore.getState().isConnected) {
+                    invoke('resize_terminal', { id: 'term-1', rows: dims.rows, cols: dims.cols });
+                }
+            });
         });
         resizeObserver.observe(terminalRef.current);
 
@@ -127,63 +143,75 @@ export default function TerminalPanel() {
             resizeObserver.disconnect();
             unlisten.then(f => f());
         };
-    }, []); // Run once on mount
+    }, []);
 
-    // 3. Auto-Connect / Disconnect Effect
+    // ... (Auto Connect Effect stays same)
     useEffect(() => {
-        // We use a stable ID 'term-1' for the dashboard terminal.
         if (isConnected) {
-            console.log("Auto-connecting terminal auto...");
-            invoke('start_terminal_auto', {
-                id: 'term-1'
-            }).then(() => {
-                // Resize after connect to ensure size is correct
+            xtermRef.current?.clear();
+            invoke('start_terminal_auto', { id: 'term-1' }).then(() => {
                 setTimeout(() => {
+                    fitAddonRef.current?.fit();
                     const dims = fitAddonRef.current?.proposeDimensions();
-                    if (dims) {
-                        invoke('resize_terminal', { id: 'term-1', rows: dims.rows, cols: dims.cols });
-                    }
+                    if (dims) invoke('resize_terminal', { id: 'term-1', rows: dims.rows, cols: dims.cols });
                     xtermRef.current?.focus();
-                }, 200);
+                }, 100);
             }).catch(e => {
                 xtermRef.current?.write(`\r\n\x1b[31mFailed to launch terminal: ${e}\x1b[0m\r\n`);
             });
         } else {
-            // Disconnected
-            // We can't explicitly "kill" from here easily without a command, 
-            // but the backend should handle cleanup or we can add `stop_terminal`?
-            // For now, relies on backend cleaning up or just letting the process sit? 
-            // Req 7: "On Dashboard Disconnect... Kill terminal process".
-            // We don't have `stop_terminal` exposed in this task list, but `on App Close` was mentioned.
-            // Let's assume `TerminalState` is persistent. 
-            // The `start_terminal` overwrites the entry in HashMap?
-            // If we re-connect, we just spawn a new one and overwrite the old handle in the map, dropping the old one.
-            // Dropping `TerminalSession` (Process) *should* kill it if `portable-pty` behaves safely.
-            // Rust `Drop` for `Child` usually kills it.
-            // So re-connecting handles it. Explicit disconnect might need a command if we want to clear resources immediately.
-            // For MVP auto-connect, this is acceptable.
-
             xtermRef.current?.clear();
-            xtermRef.current?.write("\r\n\x1b[90mDisconnected. Connect via Dashboard to start.\x1b[0m\r\n");
         }
     }, [isConnected]);
 
-
-    // Use refs for "live" access inside callbacks (onData)
     const stateRef = useRef({ readOnly, inputBuffer });
     useEffect(() => {
         stateRef.current = { readOnly, inputBuffer };
     }, [readOnly, inputBuffer]);
 
 
-    const handleEnter = async () => {
-        const { inputBuffer } = stateRef.current;
+    const handleEnter = async (term: Terminal) => {
+        // Source of Truth: The current line in the terminal buffer.
+        // This captures typed commands AND history (Up Arrow).
+        // We look at cursorY.
+        let currentLine = "";
+        try {
+            // Get current line (might be partial if wrapped, but usually enough for keyword detection)
+            const buffer = term.buffer.active;
+            const lineObj = buffer.getLine(buffer.baseY + buffer.cursorY);
+            if (lineObj) {
+                currentLine = lineObj.translateToString(true).trim();
+            }
+        } catch (e) {
+            // fallback
+            currentLine = stateRef.current.inputBuffer;
+        }
 
-        // 1. Safety Check
-        if (DANGEROUS_REGEX.test(inputBuffer)) {
-            setPendingCommand(inputBuffer);
+        console.log("[Terminal] Parsing Line:", currentLine);
+
+        // 1. Safety Check (still verify regex against current line)
+        if (DANGEROUS_REGEX.test(currentLine)) {
+            setPendingCommand(currentLine);
             setShowConfirm(true);
             return;
+        }
+
+        // 2. Action Classification
+        // Determine what to do *IF* the command succeeds
+        if (/\b(CREATE|DROP|ALTER)\s+DATABASE\b/i.test(currentLine)) {
+            pendingActionRef.current = { type: 'DB_REFRESH' };
+        }
+        else if (/\b(CREATE|DROP|ALTER|TRUNCATE)\s+TABLE\b/i.test(currentLine)) {
+            pendingActionRef.current = { type: 'TABLE_REFRESH' };
+        }
+        else {
+            const useMatch = currentLine.match(/^\s*USE\s+([a-zA-Z0-9_]+)/i);
+            if (useMatch && useMatch[1]) {
+                pendingActionRef.current = { type: 'DB_SWITCH', payload: useMatch[1] };
+            } else {
+                // Clear any stale action if command is unrelated
+                pendingActionRef.current = null;
+            }
         }
 
         await sendEnter();
@@ -200,57 +228,97 @@ export default function TerminalPanel() {
     };
 
     return (
-        <div className="h-full w-full flex flex-col bg-[#1e1e1e] text-white">
-            {/* Header / Controls */}
-            <div className="flex items-center justify-between p-2 border-b border-gray-700 bg-[#252526]">
-                <div className="flex items-center gap-4">
-                    <span className="font-bold text-sm text-gray-300">TERMINAL</span>
+        <div className="h-full w-full flex flex-col bg-[#181818] text-white">
+            {/* Minimalist Header */}
+            <div className="flex items-center justify-between h-9 px-3 bg-[#181818] border-b border-[#2b2b2b]">
+                <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors cursor-default select-none">
+                        <TerminalIcon className="w-3.5 h-3.5" />
+                        <span className="text-xs font-medium tracking-wide uppercase">Terminal</span>
+                    </div>
 
-                    {/* If connected, show Connection Info / DB Name */}
+                    {/* Connection Badge */}
                     {isConnected && activeDatabase && (
-                        <span className="text-xs text-blue-400">[{activeDatabase}]</span>
+                        <div className="flex items-center gap-1.5 px-2 py-0.5 bg-[#252526] rounded text-[10px] text-blue-400 border border-[#3e3e3e]">
+                            <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>
+                            {activeDatabase}
+                        </div>
                     )}
                 </div>
 
-                {/* Read Only Toggle */}
-                <div className="flex items-center gap-2">
-                    <div className="flex items-center gap-1 bg-gray-800 rounded px-1">
-                        <span className={`w-2 h-2 rounded-full ${readOnly ? 'bg-orange-500' : 'bg-green-500'}`}></span>
-                        <span className="text-xs">{readOnly ? 'SAFE MODE' : 'UNRESTRICTED'}</span>
-                    </div>
-                    <button className="bg-gray-700 hover:bg-gray-600 text-xs px-2 py-1 rounded" onClick={() => setReadOnly(!readOnly)}>
-                        {readOnly ? 'Unlock' : 'Lock'}
+                {/* Controls */}
+                <div className="flex items-center gap-3">
+                    {/* Safe Mode Toggle */}
+                    <button
+                        onClick={() => setReadOnly(!readOnly)}
+                        className={`
+                            flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium transition-all
+                            ${readOnly
+                                ? 'bg-amber-900/20 text-amber-500 border border-amber-900/50 hover:bg-amber-900/30'
+                                : 'bg-[#252526] text-gray-500 border border-[#3e3e3e] hover:text-gray-300'}
+                        `}
+                        title={readOnly ? "Safe Mode Active: Dangerous commands require confirmation" : "Unrestricted Mode"}
+                    >
+                        {readOnly ? <ShieldAlert className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
+                        <span>{readOnly ? 'Safe Mode' : 'Unrestricted'}</span>
                     </button>
                 </div>
             </div>
 
             {/* Terminal Container */}
-            <div className="flex-1 overflow-hidden relative" style={{ padding: '8px' }}>
-                <div ref={terminalRef} className="w-full h-full" />
+            <div className="flex-1 relative bg-[#181818]">
+                {/* 
+                   Padding added via wrapper div to avoid xterm internal padding issues with fit addon 
+                   But VSCode Terminal is edge-to-edge usually. Let's keep a tiny padding for aesthetics.
+                */}
+                <div className="absolute inset-0 pl-3 pt-2 pb-1 pr-1">
+                    <div ref={terminalRef} className="w-full h-full" />
+                </div>
 
+                {/* Not Connected State */}
                 {!isConnected && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/50 pointer-events-none">
-                        <div className="text-gray-500">Not Connected</div>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#181818]/90 z-10 pointer-events-none">
+                        <div className="flex flex-col items-center gap-3 opacity-60">
+                            <TerminalIcon className="w-12 h-12 text-gray-600" />
+                            <p className="text-gray-500 text-sm font-medium">No Active Connection</p>
+                            <span className="text-xs text-gray-600">Connect to a database to start the terminal</span>
+                        </div>
                     </div>
                 )}
             </div>
 
             {/* Danger Modal */}
             {showConfirm && (
-                <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80">
-                    <div className="bg-[#2d2d2d] border border-red-600 rounded-lg p-6 max-w-md shadow-2xl">
-                        <h3 className="text-xl font-bold text-red-500 mb-2">⚠ Dangerous Operation Detected</h3>
-                        <p className="text-gray-300 mb-4">
-                            This command may cause data loss or schema changes:
-                        </p>
-                        <pre className="bg-black p-3 rounded text-red-400 font-mono text-sm mb-6 whitespace-pre-wrap">
-                            {pendingCommand}
-                        </pre>
-                        <div className="flex justify-end gap-3">
-                            <button className="px-4 py-2 rounded bg-gray-600 hover:bg-gray-500 text-white"
-                                onClick={() => setShowConfirm(false)}>Cancel</button>
-                            <button className="px-4 py-2 rounded bg-red-600 hover:bg-red-500 text-white font-bold"
-                                onClick={confirmDanger}>CONFIRM EXECUTION</button>
+                <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-[1px]">
+                    <div className="bg-[#1e1e1e] border border-red-900/50 rounded-lg shadow-2xl w-[400px] overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+                        <div className="bg-red-900/20 px-4 py-3 border-b border-red-900/30 flex items-center gap-3">
+                            <AlertTriangle className="w-5 h-5 text-red-500" />
+                            <h3 className="font-semibold text-red-100 text-sm">Dangerous Operation</h3>
+                        </div>
+
+                        <div className="p-4 space-y-4">
+                            <p className="text-gray-300 text-xs leading-relaxed">
+                                You are about to execute a destructive command. This action may result in data loss.
+                            </p>
+
+                            <div className="bg-black/50 rounded p-3 font-mono text-xs text-red-300 break-all border border-red-900/20">
+                                {pendingCommand}
+                            </div>
+
+                            <div className="flex justify-end gap-2 pt-2">
+                                <button
+                                    className="px-3 py-1.5 rounded text-xs font-medium text-gray-400 hover:text-white hover:bg-[#3e3e3e] transition-colors"
+                                    onClick={() => setShowConfirm(false)}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    className="px-3 py-1.5 rounded text-xs font-bold bg-red-600 hover:bg-red-500 text-white transition-colors shadow-lg shadow-red-900/20"
+                                    onClick={confirmDanger}
+                                >
+                                    Confirm Execution
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -258,3 +326,4 @@ export default function TerminalPanel() {
         </div>
     );
 }
+

@@ -279,6 +279,31 @@ fn map_rows_to_preview(rows: Vec<MySqlRow>, limited: bool) -> Result<TablePrevie
     })
 }
 
+#[tauri::command]
+async fn mysql_disconnect_database(state: State<'_, DbState>) -> Result<(), String> {
+    *state.pool.lock().unwrap() = None;
+    *state.config.lock().unwrap() = None;
+    Ok(())
+}
+
+#[tauri::command]
+async fn mysql_refresh_databases(state: State<'_, DbState>) -> Result<Vec<String>, String> {
+    let pool = {
+        let pool_guard = state.pool.lock().map_err(|e| e.to_string())?;
+        pool_guard.as_ref().ok_or("No active connection")?.clone()
+    };
+
+    let databases: Vec<String> = sqlx::query("SHOW DATABASES")
+        .fetch_all(&pool)
+        .await
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .map(|row| row.get(0))
+        .collect();
+    
+    Ok(databases)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -292,11 +317,13 @@ pub fn run() {
             mysql_list_tables,
             mysql_preview_table,
             sql_run_query,
+            mysql_disconnect_database,
             export_database_schema,
             start_terminal,
-            start_terminal_auto,
             write_terminal,
-            resize_terminal
+            resize_terminal,
+            start_terminal_auto,
+            mysql_refresh_databases
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
