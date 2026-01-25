@@ -50,8 +50,24 @@ interface DatabaseStore {
     closeDatabase: () => void;
     disconnect: () => void;
 
+    // Export State
+    exportState: 'idle' | 'loading' | 'success' | 'error';
+    exportResult: ExportResult | null;
+    exportSchema: () => Promise<void>;
+    clearExportStatus: () => void;
+
     // Internal
     initializeListeners: () => void;
+}
+
+export interface ExportResult {
+    success: boolean;
+    json_path: string;
+    dot_path: string;
+    markdown_path: string;
+    export_dir: string;
+    svg_path?: string;
+    message: string;
 }
 
 export const useDatabaseStore = create<DatabaseStore>((set, get) => ({
@@ -69,6 +85,9 @@ export const useDatabaseStore = create<DatabaseStore>((set, get) => ({
     previewData: null,
     previewError: null,
 
+    exportState: 'idle',
+    exportResult: null,
+
     initializeListeners: () => {
         // Listen for backend db-switched events
         listen<string>('db-switched', async (event) => {
@@ -84,7 +103,8 @@ export const useDatabaseStore = create<DatabaseStore>((set, get) => ({
                     activeTable: null,
                     previewState: 'idle',
                     previewData: null,
-                    previewError: null
+                    previewError: null,
+                    exportState: 'idle'
                 });
                 // Fetch tables for the new DB
                 try {
@@ -126,7 +146,9 @@ export const useDatabaseStore = create<DatabaseStore>((set, get) => ({
             activeTable: null,
             previewState: 'idle',
             previewData: null,
-            previewError: null
+            previewError: null,
+            exportState: 'idle',
+            exportResult: null
         });
 
         try {
@@ -217,7 +239,9 @@ export const useDatabaseStore = create<DatabaseStore>((set, get) => ({
             activeTable: null,
             previewState: 'idle',
             previewData: null,
-            previewError: null
+            previewError: null,
+            exportState: 'idle',
+            exportResult: null
         });
     },
 
@@ -231,7 +255,33 @@ export const useDatabaseStore = create<DatabaseStore>((set, get) => ({
             previewState: 'idle',
             previewData: null,
             previewError: null,
-            connectionUser: null
+            connectionUser: null,
+            exportState: 'idle',
+            exportResult: null
         });
+    },
+
+    exportSchema: async () => {
+        set({ exportState: 'loading', exportResult: null });
+        try {
+            const result = await invoke<ExportResult>('export_database_schema');
+            set({ exportState: 'success', exportResult: result });
+        } catch (error: any) {
+            set({
+                exportState: 'error', exportResult: {
+                    success: false,
+                    message: error.toString(),
+                    json_path: '',
+                    dot_path: '',
+                    markdown_path: '',
+                    export_dir: ''
+                }
+            });
+        }
+    },
+
+    clearExportStatus: () => {
+        set({ exportState: 'idle', exportResult: null });
     }
 }));
+

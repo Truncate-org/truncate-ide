@@ -1,0 +1,27 @@
+#!/bin/sh
+# Mock dot binary
+# Usage: dot -Tsvg input.dot -o output.svg
+# We just need to create the output file.
+
+OUTPUT_FILE=""
+
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    -o)
+      OUTPUT_FILE="$2"
+      shift # passed argument
+      shift # passed value
+      ;;
+    *)
+      shift # unknown option
+      ;;
+  esac
+done
+
+if [ -n "$OUTPUT_FILE" ]; then
+  echo "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 100'><rect width='200' height='100' fill='#eee'/><text x='10' y='50' font-family='sans-serif'>Mock ER Diagram</text></svg>" > "$OUTPUT_FILE"
+  # exit success
+  exit 0
+else
+  exit 1
+fi

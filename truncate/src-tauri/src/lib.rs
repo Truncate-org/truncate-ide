@@ -77,6 +77,9 @@ async fn sql_run_query(
 
 pub mod db_state;
 pub mod sql_utils;
+pub mod schema;
+use std::path::PathBuf;
+use tauri::Manager; // For path access
 
 #[derive(serde::Serialize)]
 pub struct TablePreview {
@@ -278,14 +281,55 @@ fn map_rows_to_preview(rows: Vec<MySqlRow>, limited: bool) -> Result<TablePrevie
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_shell::init())
         .manage(DbState::new())
         .invoke_handler(tauri::generate_handler![
             mysql_connect_server,
             mysql_select_database,
             mysql_list_tables,
             mysql_preview_table,
-            sql_run_query
+            sql_run_query,
+            export_database_schema
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[tauri::command]
+async fn export_database_schema(
+    state: State<'_, DbState>,
+    app_handle: tauri::AppHandle,
+) -> Result<crate::schema::ExportResult, String> {
+    let (pool, _db_name) = {
+        let pool_guard = state.pool.lock().unwrap();
+        let _config_guard = state.config.lock().unwrap();
+        
+        let pool = pool_guard.as_ref().ok_or("No active connection")?.clone();
+        
+        // We get the DB name from the current pool connection or we might need to store it explicitly.
+        // For now, let's assume the user has selected a database and we can get it from the query or config if we stored it.
+        // Wait, the current connection string might not have the DB name if we switched it. 
+        // Let's rely on the fact that `switch_db_internal` updates the pool with the database.
+        
+        // HOWEVER, to be safe and accurate, we should probably pass the db_name from frontend or store it in state.
+        // Looking at `DbState`, it stores `ConnectionConfig` but `switch_db_internal` creates a new pool with the DB.
+        // We really need the db name. 
+        
+        // Let's update `ConnectionConfig` to optionally store `database` or just query `SELECT DATABASE()`
+        (pool, ())
+    };
+    
+    // Retrieve actual current database name
+    let row: (String,) = sqlx::query_as("SELECT DATABASE()")
+        .fetch_one(&pool)
+        .await
+        .map_err(|e| format!("Failed to get current database: {}", e))?;
+    let db_name = row.0;
+
+    let schema = crate::schema::extract_schema(&pool, &db_name).await?;
+    
+    // Determine download path (e.g., Downloads folder or Desktop)
+    let download_path = app_handle.path().download_dir().unwrap_or(PathBuf::from("."));
+    
+    crate::schema::save_schema_files(&schema, &download_path, &app_handle)
 }

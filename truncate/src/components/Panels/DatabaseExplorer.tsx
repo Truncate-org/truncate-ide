@@ -1,7 +1,8 @@
 import React from 'react';
 import { useDatabaseStore } from '../../store/databaseStore';
 import { ConnectionCard } from './ConnectionCard';
-import { Database, Table, Play, Power, ArrowLeft } from 'lucide-react';
+import { Database, Table, Play, Power, ArrowLeft, Download, Loader2, FolderOpen } from 'lucide-react';
+import { openPath } from '@tauri-apps/plugin-opener';
 import clsx from 'clsx';
 
 const DatabaseExplorer: React.FC = () => {
@@ -15,7 +16,10 @@ const DatabaseExplorer: React.FC = () => {
         selectTable,
         closeDatabase,
         disconnect,
-        connectionUser
+        connectionUser,
+        exportSchema,
+        exportState,
+        exportResult
     } = useDatabaseStore();
 
     return (
@@ -105,13 +109,58 @@ const DatabaseExplorer: React.FC = () => {
                                         </div>
                                     </div>
 
-                                    <button
-                                        onClick={closeDatabase}
-                                        className="w-full flex items-center justify-center gap-2 px-3 py-1 bg-[#2a2d2e] hover:bg-[#323638] text-gray-400 hover:text-white text-[10px] uppercase tracking-wide rounded transition-colors border border-[#3e3e3e]"
-                                    >
-                                        <ArrowLeft className="w-3 h-3" />
-                                        Disconnect
-                                    </button>
+                                    <div className="flex gap-2">
+                                        <button
+                                            onClick={exportSchema}
+                                            disabled={exportState === 'loading'}
+                                            className="flex-1 flex items-center justify-center gap-2 px-3 py-1 bg-[#2a2d2e] hover:bg-[#323638] text-gray-400 hover:text-white text-[10px] uppercase tracking-wide rounded transition-colors border border-[#3e3e3e] disabled:opacity-50"
+                                            title="Export Schema to JSON & DOT"
+                                        >
+                                            {exportState === 'loading' ? (
+                                                <Loader2 className="w-3 h-3 animate-spin" />
+                                            ) : (
+                                                <Download className="w-3 h-3" />
+                                            )}
+                                            {exportState === 'loading' ? 'Exporting...' : 'Export Schema'}
+                                        </button>
+                                        <button
+                                            onClick={closeDatabase}
+                                            className="flex items-center justify-center gap-2 px-3 py-1 bg-[#2a2d2e] hover:bg-[#323638] text-gray-400 hover:text-white text-[10px] uppercase tracking-wide rounded transition-colors border border-[#3e3e3e]"
+                                            title="Disconnect Database"
+                                        >
+                                            <ArrowLeft className="w-3 h-3" />
+                                        </button>
+                                    </div>
+
+                                    {exportState === 'success' && (
+                                        <div className="mt-2 flex flex-col gap-1">
+                                            <div className="px-2 py-1 bg-green-900/20 border border-green-800 rounded text-[10px] text-green-400">
+                                                {exportResult?.message}
+                                            </div>
+
+                                            <button
+                                                onClick={async () => {
+                                                    if (exportResult?.export_dir) {
+                                                        try {
+                                                            await openPath(exportResult.export_dir);
+                                                        } catch (e) {
+                                                            console.error("Failed to open path", e);
+                                                        }
+                                                    }
+                                                }}
+                                                className="flex items-center justify-center gap-1.5 px-2 py-1 bg-green-800/20 hover:bg-green-800/40 border border-green-800 rounded text-green-400 text-[10px] transition-colors"
+                                            >
+                                                <FolderOpen className="w-3 h-3" />
+                                                Open Export Folder
+                                            </button>
+                                        </div>
+                                    )}
+
+                                    {exportState === 'error' && (
+                                        <div className="mt-2 px-2 py-1 bg-red-900/20 border border-red-800 rounded text-[10px] text-red-400 break-words">
+                                            Error: {exportResult?.message}
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* Tables List */}
