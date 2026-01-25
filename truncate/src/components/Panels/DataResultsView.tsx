@@ -1,6 +1,7 @@
 import React from 'react';
 import { useDatabaseStore, TablePreview } from '../../store/databaseStore';
 import { Loader2, AlertCircle, Table as TableIcon } from 'lucide-react';
+import ResultSetTable from './ResultSetTable';
 
 const DataResultsView: React.FC = () => {
     const { previewState, previewData, previewError } = useDatabaseStore();
@@ -78,69 +79,23 @@ const DataResultsView: React.FC = () => {
 
             return (
                 <div className="flex flex-col h-full">
-                    <div className="bg-surface-secondary">
-                        {/* Status Header */}
-                        <div className="h-8 border-b border-subtle flex items-center px-3 justify-between bg-editor-bg">
-                            <div className="flex items-center text-xs text-green-400">
-                                <span className="mr-2">✔</span>
-                                <span className="font-medium">Query executed successfully</span>
-                            </div>
-                            {previewData.executionDuration !== undefined && (
-                                <div className="flex items-center space-x-3">
-                                    <span className="text-[10px] uppercase tracking-wider text-green-500/50 font-mono">
-                                        {previewData.executionDuration}ms
-                                    </span>
-                                </div>
-                            )}
+                    {/* Status Header */}
+                    <div className="h-8 border-b border-subtle flex items-center px-3 justify-between bg-editor-bg shrink-0">
+                        <div className="flex items-center text-xs text-green-400">
+                            <span className="mr-2">✔</span>
+                            <span className="font-medium">Query executed successfully</span>
                         </div>
-
-                        {/* Result Meta Bar */}
-                        <div className="h-9 border-b border-subtle flex items-center px-4 font-semibold text-primary select-none justify-between">
-                            <div className="flex items-center">
-                                <TableIcon className="w-4 h-4 mr-2 text-secondary" />
-                                <span className="text-xs">Result: {tableData.rows.length} rows</span>
-                            </div>
-                            {tableData.limited && (
-                                <span className="text-[10px] uppercase tracking-wider text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
-                                    Limited to 1000
+                        {previewData.executionDuration !== undefined && (
+                            <div className="flex items-center space-x-3">
+                                <span className="text-[10px] uppercase tracking-wider text-green-500/50 font-mono">
+                                    {previewData.executionDuration}ms
                                 </span>
-                            )}
-                        </div>
+                            </div>
+                        )}
                     </div>
-                    <div className="flex-1 overflow-auto bg-editor-bg">
-                        <table className="w-full text-left border-collapse">
-                            <thead className="bg-surface-secondary sticky top-0 z-10">
-                                <tr>
-                                    {tableData.columns.map((col, idx) => (
-                                        <th
-                                            key={idx}
-                                            className="px-4 py-2 text-xs font-semibold text-secondary border-b border-r border-[#3e3e3e] whitespace-nowrap bg-[#252526]"
-                                        >
-                                            {col}
-                                        </th>
-                                    ))}
-                                </tr>
-                            </thead>
-                            <tbody className="text-sm text-primary font-mono">
-                                {tableData.rows.map((row, rowIdx) => (
-                                    <tr key={rowIdx} className="hover:bg-[#2a2d2e] transition-colors">
-                                        {row.map((cell, cellIdx) => (
-                                            <td
-                                                key={cellIdx}
-                                                className="px-4 py-1.5 border-b border-r border-[#3e3e3e] whitespace-nowrap overflow-hidden text-ellipsis max-w-[300px]"
-                                                title={cell}
-                                            >
-                                                {cell}
-                                            </td>
-                                        ))}
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                        <div className="p-2 text-xs text-secondary border-t border-[#3e3e3e]">
-                            Showing first {tableData.rows.length} rows
-                        </div>
-                    </div>
+
+                    {/* Responsive Table */}
+                    <ResultSetTable data={tableData} />
                 </div>
             );
         }
