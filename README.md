@@ -2,29 +2,27 @@
 
 **Truncate IDE** is a modern, high-performance SQL client built for speed, safety, and developer experience. Designed as a lightweight alternative to heavy database tools, it leverages the power of **Tauri (Rust)** for a native backend and **React** for a responsive frontend.
 
-![Truncate IDE](https://via.placeholder.com/800x450?text=Truncate+IDE+Preview)
+## Key Features
 
-## ✨ Key Features
-
-- **⚡ Lightning-Fast Execution**: Built on Rust `sqlx`, offering near-instant query performance.
-- **🎨 Professional SQL Editor**: 
+- **Lightning-Fast Execution**: Built on Rust `sqlx`, offering near-instant query performance.
+- **Professional SQL Editor**: 
   - Powered by **Monaco Editor** (VS Code engine).
   - Real-time syntax highlighting with a custom "Truncate Dark" theme.
   - Bracket matching, line numbers, and intelligent wrapping.
-- **🛡️ Safety First**:
+- **Safety First**:
   - **Stateless Execution**: Each run is isolated; no context bleeding between queries.
   - **Destructive Query Protection**: Blocks `DELETE`, `DROP`, `UPDATE` in MVP mode.
   - **Smart Validation**: Validates SQL structure (e.g., `SELECT` requires `FROM`) before execution.
-- **🧠 IDE-Grade Experience**:
+- **IDE-Grade Experience**:
   - **Comment-Aware**: Strips comments automatically; treats comments-only input as a no-op.
   - **Execution Feedback**: Immediate status feedback with execution duration.
   - **Auto-Limit**: Smartly applies `LIMIT 1000` to large queries without modifying your original SQL.
-- **🗄️ Database Explorer**: 
+- **Database Explorer**: 
   - Manage connections (Host, Port, User).
   - Browse databases and tables.
   - Live context switching via UI or SQL `USE` commands.
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 - **Frontend**:
   - [React 19](https://react.dev/) + [Vite](https://vitejs.dev/)
@@ -39,7 +37,7 @@
   - [SQLx](https://github.com/launchbadge/sqlx) (MySQL Async Driver)
   - [Tokio](https://tokio.rs/) (Async Runtime)
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 
@@ -66,7 +64,7 @@
    ```
    This will start the Vite frontend and compile the Rust backend. The application window should appear shortly.
 
-## 📝 Usage Guide
+## Usage Guide
 
 ### Connecting to a Database
 1. Launch the app.
@@ -84,10 +82,10 @@
 - `Cmd+Enter`: Run Query
 - `Cmd+P` (Planned): Command Palette
 
-## 🤝 Contributing
+## Contributing
 
 Contributions are welcome! Please read our [CONTRIBUTING.md](CONTRIBUTING.md) (coming soon) for details on our code of conduct, and the process for submitting pull requests.
 
-## 📄 License
+## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
