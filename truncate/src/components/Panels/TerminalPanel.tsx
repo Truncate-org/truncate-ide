@@ -48,6 +48,9 @@ export default function TerminalPanel() {
     // Track pending actions based on executed commands
     const pendingActionRef = useRef<{ type: 'DB_REFRESH' | 'TABLE_REFRESH' | 'DB_SWITCH', payload?: string } | null>(null);
 
+    // Track last DB synced to terminal to avoid feedback loops
+    const lastSyncedDbRef = useRef<string | null>(null);
+
     useEffect(() => {
         if (!terminalRef.current) return;
 
@@ -112,6 +115,8 @@ export default function TerminalPanel() {
                         const action = pendingActionRef.current;
                         if (action && action.type === 'DB_SWITCH' && action.payload) {
                             console.log("[Terminal] Switch detected. Syncing UI to:", action.payload);
+                            // Update local ref so we don't echo back
+                            lastSyncedDbRef.current = action.payload;
                             selectDatabase(action.payload).catch(console.error);
                             pendingActionRef.current = null;
                         }
@@ -164,6 +169,18 @@ export default function TerminalPanel() {
         }
     }, [isConnected]);
 
+    // UI -> Terminal Sync Effect
+    useEffect(() => {
+        if (isConnected && activeDatabase) {
+            if (activeDatabase !== lastSyncedDbRef.current) {
+                console.log(`[Terminal] UI switched to ${activeDatabase}. Syncing terminal...`);
+                // Send USE command to terminal silently-ish (it will appear in history/output which is correct)
+                invoke('write_terminal', { id: 'term-1', data: `USE ${activeDatabase};\r` });
+                lastSyncedDbRef.current = activeDatabase;
+            }
+        }
+    }, [isConnected, activeDatabase]);
+
     const stateRef = useRef({ readOnly, inputBuffer });
     useEffect(() => {
         stateRef.current = { readOnly, inputBuffer };
@@ -189,6 +206,24 @@ export default function TerminalPanel() {
 
         console.log("[Terminal] Parsing Line:", currentLine);
 
+        // check for USE match first to update ref if needed (though output listener handles it)
+        const useMatch = currentLine.match(/^\s*USE\s+([a-zA-Z0-9_]+)/i);
+
+        // 0. Block Table commands if no DB selected
+        // We check if it's a table command AND we are not switching DB
+        // AND we don't have an active database.
+        const activeDb = useDatabaseStore.getState().activeDatabase; // Get fresh state
+        const isTableCommand = /\b(CREATE|DROP|ALTER|TRUNCATE)\s+TABLE\b/i.test(currentLine);
+        const isSwitchingDb = !!useMatch;
+
+        if (isTableCommand && !activeDb && !isSwitchingDb) {
+            term.write('\r\n\x1b[31mError: No database selected. Please select or USE a database first.\x1b[0m\r\n');
+            // We do NOT sendEnter here, effectively blocking the command
+            setInputBuffer(''); // clear local buffer
+            invoke('write_terminal', { id: 'term-1', data: '\r\n' }); // Echo newline to clear visual
+            return;
+        }
+
         // 1. Safety Check (still verify regex against current line)
         if (DANGEROUS_REGEX.test(currentLine)) {
             setPendingCommand(currentLine);
@@ -201,15 +236,13 @@ export default function TerminalPanel() {
         if (/\b(CREATE|DROP|ALTER)\s+DATABASE\b/i.test(currentLine)) {
             pendingActionRef.current = { type: 'DB_REFRESH' };
         }
-        else if (/\b(CREATE|DROP|ALTER|TRUNCATE)\s+TABLE\b/i.test(currentLine)) {
+        else if (isTableCommand) {
             pendingActionRef.current = { type: 'TABLE_REFRESH' };
         }
         else {
-            const useMatch = currentLine.match(/^\s*USE\s+([a-zA-Z0-9_]+)/i);
             if (useMatch && useMatch[1]) {
                 pendingActionRef.current = { type: 'DB_SWITCH', payload: useMatch[1] };
             } else {
-                // Clear any stale action if command is unrelated
                 pendingActionRef.current = null;
             }
         }
@@ -326,4 +359,3 @@ export default function TerminalPanel() {
         </div>
     );
 }
-
