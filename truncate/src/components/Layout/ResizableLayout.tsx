@@ -1,12 +1,24 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Panel, Group as PanelGroup, Separator as PanelResizeHandle } from 'react-resizable-panels';
 import DatabaseExplorer from '../Panels/DatabaseExplorer.tsx';
 import DataResultsView from '../Panels/DataResultsView.tsx';
 import SqlEditor from '../Panels/SqlEditor.tsx';
+import TerminalPanel from '../Panels/TerminalPanel.tsx';
 import AiAssistant from '../Panels/AiAssistant.tsx';
 import StatusBar from '../StatusBar.tsx';
+import { useDatabaseStore } from '../../store/databaseStore.ts';
 
 const ResizableLayout: React.FC = () => {
+    const [activeTab, setActiveTab] = useState<'editor' | 'terminal'>('editor');
+    const isConnected = useDatabaseStore(state => state.isConnected);
+
+    // Auto-open terminal on connect
+    useEffect(() => {
+        if (isConnected) {
+            setActiveTab('terminal');
+        }
+    }, [isConnected]);
+
     // Custom Handle Component for consistent look and feel
     // Hit area increased to 8px for easier grabbing
     const HandleV = () => (
@@ -44,17 +56,40 @@ const ResizableLayout: React.FC = () => {
                     <Panel minSize={30}>
                         <PanelGroup orientation="vertical">
                             {/* Center Top: Results View */}
-                            <Panel defaultSize={70} minSize={30} className="bg-app flex flex-col">
+                            <Panel defaultSize={60} minSize={30} className="bg-app flex flex-col">
                                 <DataResultsView />
                             </Panel>
 
                             <HandleH />
 
-                            {/* Center Bottom: SQL Editor 
-                            Constraints: Min 180px (approx 20% of 900px height, passing percentage minSize allows resize)
+                            {/* Center Bottom: SQL Editor / Terminal
+                            Constraints: Min 180px
                         */}
-                            <Panel defaultSize={30} minSize="180px" className="bg-panel flex flex-col">
-                                <SqlEditor />
+                            <Panel defaultSize={40} minSize="180px" className="bg-panel flex flex-col">
+                                {/* Tab Bar */}
+                                <div className="flex border-b border-subtle bg-sidebar">
+                                    <button
+                                        className={`px-4 py-1.5 text-xs font-medium border-r border-subtle hover:bg-hover ${activeTab === 'editor' ? 'bg-panel text-accent' : 'text-faded'}`}
+                                        onClick={() => setActiveTab('editor')}
+                                    >
+                                        SQL Editor
+                                    </button>
+                                    <button
+                                        className={`px-4 py-1.5 text-xs font-medium border-r border-subtle hover:bg-hover ${activeTab === 'terminal' ? 'bg-panel text-accent' : 'text-faded'}`}
+                                        onClick={() => setActiveTab('terminal')}
+                                    >
+                                        Terminal
+                                    </button>
+                                </div>
+
+                                <div className="flex-1 relative overflow-hidden">
+                                    <div className={`h-full w-full ${activeTab === 'editor' ? 'block' : 'hidden'}`}>
+                                        <SqlEditor />
+                                    </div>
+                                    <div className={`h-full w-full ${activeTab === 'terminal' ? 'block' : 'hidden'}`}>
+                                        <TerminalPanel />
+                                    </div>
+                                </div>
                             </Panel>
                         </PanelGroup>
                     </Panel>
@@ -76,7 +111,7 @@ const ResizableLayout: React.FC = () => {
                 </PanelGroup>
             </div>
             <StatusBar />
-        </div >
+        </div>
     );
 };
 

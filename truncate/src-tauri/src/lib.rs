@@ -78,6 +78,8 @@ async fn sql_run_query(
 pub mod db_state;
 pub mod sql_utils;
 pub mod schema;
+pub mod terminal;
+use crate::terminal::{TerminalState, start_terminal, write_terminal, resize_terminal, start_terminal_auto};
 use std::path::PathBuf;
 use tauri::Manager; // For path access
 
@@ -283,13 +285,18 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_shell::init())
         .manage(DbState::new())
+        .manage(TerminalState::new())
         .invoke_handler(tauri::generate_handler![
             mysql_connect_server,
             mysql_select_database,
             mysql_list_tables,
             mysql_preview_table,
             sql_run_query,
-            export_database_schema
+            export_database_schema,
+            start_terminal,
+            start_terminal_auto,
+            write_terminal,
+            resize_terminal
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
