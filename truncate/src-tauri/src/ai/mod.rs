@@ -1,7 +1,6 @@
+pub mod loop;
 pub mod types;
 
-/// Entry point for AI planning.
-/// For now, this is a stub.
-pub fn plan_query(_question: &str) -> Result<types::Plan, String> {
-    Err("AI planner not implemented yet".into())
+pub fn plan_query(question: &str) -> Result<types::Plan, String> {
+    loop::generate_plan_with_review(question, 3)
 }
