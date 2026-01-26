@@ -1,5 +1,7 @@
-use std::process::{Command, Stdio};
 use std::io::Write;
+use std::process::{Command, Stdio};
+const PLANNER_PROMPT: &str = include_str!("prompts/planner.txt");
+const CRITIC_PROMPT: &str = include_str!("prompts/critic.txt");
 
 use super::types::Plan;
 
@@ -24,32 +26,21 @@ fn run_ollama(prompt: &str) -> Result<String, String> {
         .wait_with_output()
         .map_err(|e| format!("Failed to read ollama output: {}", e))?;
 
-    String::from_utf8(output.stdout)
-        .map_err(|e| format!("Invalid UTF-8 from ollama: {}", e))
+    String::from_utf8(output.stdout).map_err(|e| format!("Invalid UTF-8 from ollama: {}", e))
 }
 
-fn load_prompt(path: &str) -> Result<String, String> {
-    std::fs::read_to_string(path)
-        .map_err(|e| format!("Failed to load prompt {}: {}", path, e))
-}
-
-pub fn generate_plan_with_review(
-    question: &str,
-    max_retries: usize,
-) -> Result<Plan, String> {
-    let planner_prompt =
-        load_prompt("src-tauri/src/ai/prompts/planner.txt")?;
-    let critic_prompt =
-        load_prompt("src-tauri/src/ai/prompts/critic.txt")?;
+pub fn generate_plan_with_review(question: &str, max_retries: usize) -> Result<Plan, String> {
+    let planner_prompt = PLANNER_PROMPT;
+    let critic_prompt = CRITIC_PROMPT;
 
     for attempt in 1..=max_retries {
         // ---- PLANNER ----
-        let full_planner_prompt = format!(
-            "{}\n\nQuestion:\n{}\n",
-            planner_prompt, question
-        );
+        let full_planner_prompt = format!("{}\n\nQuestion:\n{}\n", planner_prompt, question);
 
         let planner_output = run_ollama(&full_planner_prompt)?;
+
+        eprintln!("--- PLANNER OUTPUT ---");
+        eprintln!("{}", planner_output);
 
         let plan: Plan = match serde_json::from_str(&planner_output) {
             Ok(p) => p,
@@ -66,9 +57,9 @@ pub fn generate_plan_with_review(
             serde_json::to_string_pretty(&plan).unwrap()
         );
 
-        let verdict = run_ollama(&full_critic_prompt)?
-            .trim()
-            .to_string();
+        let verdict = run_ollama(&full_critic_prompt)?.trim().to_string();
+        eprintln!("--- CRITIC VERDICT ---");
+        eprintln!("{}", verdict);
 
         if verdict == "APPROVED" {
             return Ok(plan);

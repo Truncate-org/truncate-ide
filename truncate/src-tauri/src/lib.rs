@@ -79,6 +79,8 @@ pub mod db_state;
 pub mod sql_utils;
 pub mod schema;
 pub mod terminal;
+pub mod ai;
+
 use crate::terminal::{TerminalState, start_terminal, write_terminal, resize_terminal, start_terminal_auto};
 use std::path::PathBuf;
 use tauri::Manager; // For path access
@@ -304,6 +306,13 @@ async fn mysql_refresh_databases(state: State<'_, DbState>) -> Result<Vec<String
     Ok(databases)
 }
 
+#[tauri::command]
+fn ai_plan(question: String) -> Result<(crate::ai::types::Plan, String), String> {
+    let plan = crate::ai::plan_query(&question)?;
+    let sql = crate::ai::sql_compiler::compile_plan_to_sql(&plan)?;
+    Ok((plan, sql))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -323,7 +332,8 @@ pub fn run() {
             write_terminal,
             resize_terminal,
             start_terminal_auto,
-            mysql_refresh_databases
+            mysql_refresh_databases,
+            ai_plan
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
