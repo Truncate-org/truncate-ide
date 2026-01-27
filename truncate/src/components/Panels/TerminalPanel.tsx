@@ -7,8 +7,6 @@ import { listen } from '@tauri-apps/api/event';
 import { useDatabaseStore } from '../../store/databaseStore';
 import { Unlock, Terminal as TerminalIcon, ShieldAlert, AlertTriangle } from 'lucide-react';
 
-const DANGEROUS_REGEX = /\b(DROP|TRUNCATE|DELETE(\s+FROM)?(?!\s+WHERE)|UPDATE(\s+\w+)?(?!\s+SET\s+.*\s+WHERE))\b/i;
-
 // VS Code Dark Modern Colors
 const THEME = {
     background: '#181818',
@@ -43,13 +41,44 @@ export default function TerminalPanel() {
     const [inputBuffer, setInputBuffer] = useState('');
 
     // Use global store for connection status
-    const { isConnected, activeDatabase, refreshDatabases, refreshTables, selectDatabase } = useDatabaseStore();
+    const { isConnected, activeDatabase, refreshDatabases, refreshTables, selectDatabase, closeDatabase, connectionType, connectionStatus } = useDatabaseStore();
+
+    // We need to know connection type (MySQL vs Postgres) to handle switching correctly
+    // Since connectionType isn't directly exposed, we can infer it or update store.
+    // For now, let's assume we can add it to store or pass it.
+    // Wait, the ConnectionCard sets it but store stores it? 
+    // Store has `connectServer` but state doesn't explicitly expose `dbType`.
+    // We should fix Store to expose `dbType`. 
+    // BUT for MVP refactor, we can detect it by checking if `psql` or `mysql` is running?
+    // Or just safer to add `connectionType` to store.
+
+    // Let's rely on a reliable heuristic or update store.
+    // Let's assume we updated store. I will update store first if needed.
+    // Checking `databaseStore.ts`... `connectServer` takes dbType but doesn't store it in public state?
+    // It stores `connectionUser`.
+    // I should add `connectionType` to store.
+
+    // Assuming store has `connectionType` (I will add it).
+    // const { connectionType } = useDatabaseStore();
+
+    // Temporary PATCH: We can guess based on prompt? No.
+    // Best: Update Store.
+
 
     // Track pending actions based on executed commands
     const pendingActionRef = useRef<{ type: 'DB_REFRESH' | 'TABLE_REFRESH' | 'DB_SWITCH', payload?: string } | null>(null);
 
     // Track last DB synced to terminal to avoid feedback loops
     const lastSyncedDbRef = useRef<string | null>(null);
+
+    // DDL Regexes for real-time sync
+    // Postgres success tags usually: "CREATE TABLE", "DROP TABLE", "ALTER TABLE", "CREATE DATABASE", "DROP DATABASE"
+    const DB_REFRESH_REGEX = /^(CREATE|DROP|ALTER)\s+DATABASE/i;
+    const TABLE_REFRESH_REGEX = /^(CREATE|DROP|ALTER|TRUNCATE)\s+TABLE/i;
+
+    // Dangerous commands regex
+    const DANGEROUS_REGEX = /\b(DROP|TRUNCATE|DELETE(\s+FROM)?(?!\s+WHERE)|UPDATE(\s+\w+)?(?!\s+SET\s+.*\s+WHERE))\b/i;
+
 
     useEffect(() => {
         if (!terminalRef.current) return;
@@ -98,30 +127,40 @@ export default function TerminalPanel() {
                 term.write(data);
 
                 // Analyze output for success confirmation
-                // We check specifically for MySQL standard success messages
                 if (typeof data === 'string') {
+                    // Normalize output
+                    const cleanData = data.trim();
+
                     if (data.includes("Query OK")) {
-                        // DDL Success
+                        // MySQL Success
                         const action = pendingActionRef.current;
                         if (action) {
-                            console.log("[Terminal] Success detected. Triggering action:", action.type);
+                            console.log("[Terminal] MySQL Success detected. Triggering action:", action.type);
                             if (action.type === 'DB_REFRESH') refreshDatabases();
                             if (action.type === 'TABLE_REFRESH') refreshTables();
-                            // Clear action after triggering
                             pendingActionRef.current = null;
                         }
-                    } else if (data.includes("Database changed")) {
-                        // USE command success
+                    }
+                    // Postgres Success Tags (usually start of line in output, or standalone)
+                    else if (DB_REFRESH_REGEX.test(cleanData)) {
+                        console.log("[Terminal] Postgres DB DDL detected.");
+                        refreshDatabases();
+                    }
+                    else if (TABLE_REFRESH_REGEX.test(cleanData)) {
+                        console.log("[Terminal] Postgres Table DDL detected.");
+                        refreshTables();
+                    }
+                    else if (data.includes("Database changed")) {
+                        // MySQL USE command success
                         const action = pendingActionRef.current;
                         if (action && action.type === 'DB_SWITCH' && action.payload) {
                             console.log("[Terminal] Switch detected. Syncing UI to:", action.payload);
-                            // Update local ref so we don't echo back
                             lastSyncedDbRef.current = action.payload;
                             selectDatabase(action.payload).catch(console.error);
                             pendingActionRef.current = null;
                         }
-                    } else if (data.includes("ERROR")) {
-                        // If error, clear pending action so we don't trigger on next success randomly
+                    } else if (data.includes("ERROR") || data.includes("fatal:")) {
+                        // If error, clear pending action
                         if (pendingActionRef.current) {
                             console.log("[Terminal] Command failed. clearing pending action.");
                             pendingActionRef.current = null;
@@ -171,20 +210,93 @@ export default function TerminalPanel() {
 
     // UI -> Terminal Sync Effect
     useEffect(() => {
-        if (isConnected && activeDatabase) {
+        // STRICT GUARD: Only sync if we are fully ACTIVE (Backend verified)
+        if (isConnected && activeDatabase && connectionStatus === 'ACTIVE') {
+
+            // LOGIC: BOOT vs SWITCH
+            // If lastSyncedDbRef is null, it means we are coming from a Disconnected state (fresh boot).
+            // In this case, we MUST start the terminal process, regardless of DB type.
+            const isFreshBoot = lastSyncedDbRef.current === null;
+
             if (activeDatabase !== lastSyncedDbRef.current) {
-                console.log(`[Terminal] UI switched to ${activeDatabase}. Syncing terminal...`);
-                // Send USE command to terminal silently-ish (it will appear in history/output which is correct)
-                invoke('write_terminal', { id: 'term-1', data: `USE ${activeDatabase};\r` });
-                lastSyncedDbRef.current = activeDatabase;
+                console.log(`[Terminal] Syncing. Fresh Boot: ${isFreshBoot}. Target: ${activeDatabase}`);
+
+                if (isFreshBoot) {
+                    // FRESH BOOT STRATEGY (Both Postgres & MySQL)
+                    // We must invoke start_terminal_auto because the previous PTY was killed on disconnect.
+                    console.log("[Terminal] Starting fresh terminal session...");
+                    xtermRef.current?.clear();
+                    invoke('start_terminal_auto', { id: 'term-1' }).then(() => {
+                        if (xtermRef.current) {
+                            xtermRef.current.focus();
+                            xtermRef.current.options.disableStdin = false;
+                        }
+                        lastSyncedDbRef.current = activeDatabase;
+                    }).catch(e => {
+                        xtermRef.current?.write(`\r\n\x1b[31mFailed to start terminal: ${e}\x1b[0m\r\n`);
+                    });
+
+                } else {
+                    // SWITCHING STRATEGY (Active Session exists)
+                    if (connectionType === 'postgres') {
+                        // PostgreSQL Switch: Restart required
+                        console.log("[Terminal] Switching Postgres context (Restart)...");
+                        if (xtermRef.current) {
+                            xtermRef.current.options.disableStdin = true;
+                            xtermRef.current.clear();
+                            xtermRef.current.write(`\r\n\x1b[34m[IDE] Switching database context to "${activeDatabase}"...\x1b[0m\r\n`);
+                        }
+
+                        invoke('start_terminal_auto', { id: 'term-1' }).then(() => {
+                            if (xtermRef.current) {
+                                xtermRef.current.focus();
+                                xtermRef.current.options.disableStdin = false;
+                            }
+                            lastSyncedDbRef.current = activeDatabase;
+                        }).catch(e => {
+                            xtermRef.current?.write(`\r\n\x1b[31mFailed to switch terminal context: ${e}\x1b[0m\r\n`);
+                            if (xtermRef.current) xtermRef.current.options.disableStdin = false;
+                        });
+
+                    } else {
+                        // MySQL Switch: USE command optimization
+                        console.log("[Terminal] Switching MySQL context (USE command)...");
+                        invoke('write_terminal', { id: 'term-1', data: `USE ${activeDatabase};\r` });
+                        lastSyncedDbRef.current = activeDatabase;
+                    }
+                }
             }
         }
-    }, [isConnected, activeDatabase]);
+    }, [isConnected, activeDatabase, connectionType, connectionStatus]);
 
     const stateRef = useRef({ readOnly, inputBuffer });
     useEffect(() => {
         stateRef.current = { readOnly, inputBuffer };
     }, [readOnly, inputBuffer]);
+
+    // Global Input Safety: Disable terminal input if not in ACTIVE state (DB Selected)
+    useEffect(() => {
+        if (xtermRef.current) {
+
+            // Disconnect cleanup: Clear terminal to remove potential confusing history
+            if (connectionStatus === 'DISCONNECTED') {
+                lastSyncedDbRef.current = null; // FORCE RESET for next connect
+                xtermRef.current.clear();
+                xtermRef.current.write('\x1b[2J\x1b[3J\x1b[H'); // Full clear
+                xtermRef.current.write('\r\n\x1b[90m[Disconnected] No active session.\x1b[0m\r\n');
+            }
+
+            const shouldDisable = connectionStatus !== 'ACTIVE';
+            xtermRef.current.options.disableStdin = shouldDisable;
+            if (shouldDisable) {
+                xtermRef.current.write('\x1b[?25l'); // Hide cursor
+            } else {
+                xtermRef.current.write('\x1b[?25h'); // Show cursor
+                xtermRef.current.focus();
+            }
+        }
+    }, [connectionStatus]);
+
 
 
     const handleEnter = async (term: Terminal) => {

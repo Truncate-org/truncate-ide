@@ -1,5 +1,5 @@
 use serde::{Serialize, Deserialize};
-use sqlx::MySqlPool;
+
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
@@ -18,19 +18,7 @@ pub struct Table {
     pub primary_keys: Vec<String>,
 }
 
-fn get_string_from_row(row: &sqlx::mysql::MySqlRow, column: &str) -> String {
-    use sqlx::Row;
-    // Try as String first
-    if let Ok(s) = row.try_get::<String, _>(column) {
-        return s;
-    }
-    // Try as Vec<u8> (BLOB/BINARY) and convert
-    if let Ok(bytes) = row.try_get::<Vec<u8>, _>(column) {
-        return String::from_utf8_lossy(&bytes).to_string();
-    }
-    // Fallback or empty (should not happen for metadata usually)
-    String::new()
-}
+
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Column {
@@ -47,100 +35,7 @@ pub struct ForeignKey {
     pub ref_column: String,
 }
 
-pub async fn extract_schema(pool: &MySqlPool, db_name: &str) -> Result<Schema, String> {
-    // 1. Get Tables
-    let tables_query = "
-        SELECT TABLE_NAME 
-        FROM information_schema.TABLES 
-        WHERE TABLE_SCHEMA = ? AND TABLE_TYPE = 'BASE TABLE'
-    ";
-    let rows = sqlx::query(tables_query)
-        .bind(db_name)
-        .fetch_all(pool)
-        .await
-        .map_err(|e| format!("Failed to fetch tables: {}", e))?;
 
-    let mut tables = Vec::new();
-
-    for row in rows {
-        let table_name = get_string_from_row(&row, "TABLE_NAME");
-        
-        // 2. Get Columns
-        let columns_query = "
-            SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_KEY 
-            FROM information_schema.COLUMNS 
-            WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?
-            ORDER BY ORDINAL_POSITION
-        ";
-        let col_rows = sqlx::query(columns_query)
-            .bind(db_name)
-            .bind(&table_name)
-            .fetch_all(pool)
-            .await
-            .map_err(|e| format!("Failed to fetch columns for {}: {}", table_name, e))?;
-
-        let mut columns = Vec::new();
-        let mut primary_keys = Vec::new();
-
-        for col_row in col_rows {
-            let name = get_string_from_row(&col_row, "COLUMN_NAME");
-            let data_type = get_string_from_row(&col_row, "DATA_TYPE");
-            let is_nullable_str = get_string_from_row(&col_row, "IS_NULLABLE");
-            let key_type = get_string_from_row(&col_row, "COLUMN_KEY");
-
-            if key_type == "PRI" {
-                primary_keys.push(name.clone());
-            }
-
-            columns.push(Column {
-                name,
-                data_type,
-                is_nullable: is_nullable_str == "YES",
-                key_type: if key_type.is_empty() { None } else { Some(key_type) },
-            });
-        }
-
-        // 3. Get Foreign Keys
-        let fk_query = "
-            SELECT 
-                COLUMN_NAME, 
-                REFERENCED_TABLE_NAME, 
-                REFERENCED_COLUMN_NAME
-            FROM information_schema.KEY_COLUMN_USAGE
-            WHERE 
-                TABLE_SCHEMA = ? 
-                AND TABLE_NAME = ? 
-                AND REFERENCED_TABLE_NAME IS NOT NULL
-        ";
-        let fk_rows = sqlx::query(fk_query)
-            .bind(db_name)
-            .bind(&table_name)
-            .fetch_all(pool)
-            .await
-            .map_err(|e| format!("Failed to fetch foreign keys for {}: {}", table_name, e))?;
-
-        let mut foreign_keys = Vec::new();
-        for fk_row in fk_rows {
-            foreign_keys.push(ForeignKey {
-                column_name: get_string_from_row(&fk_row, "COLUMN_NAME"),
-                ref_table: get_string_from_row(&fk_row, "REFERENCED_TABLE_NAME"),
-                ref_column: get_string_from_row(&fk_row, "REFERENCED_COLUMN_NAME"),
-            });
-        }
-
-        tables.push(Table {
-            name: table_name,
-            columns,
-            foreign_keys,
-            primary_keys,
-        });
-    }
-
-    Ok(Schema {
-        database_name: db_name.to_string(),
-        tables,
-    })
-}
 
 pub fn generate_dot(schema: &Schema) -> String {
     let mut dot = String::from("digraph DatabaseSchema {\n");

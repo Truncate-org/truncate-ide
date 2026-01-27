@@ -4,6 +4,7 @@ use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use tauri::{Emitter, State};
+use crate::adapter::{ConnectionType, DatabaseAdapter};
 
 pub struct TerminalSession {
     pub writer: Box<dyn Write + Send>,
@@ -22,12 +23,6 @@ impl TerminalState {
     }
 }
 
-#[derive(serde::Deserialize)]
-pub struct TerminalSize {
-    pub rows: u16,
-    pub cols: u16,
-}
-
 use crate::db_state::DbState;
 
 #[tauri::command]
@@ -39,32 +34,66 @@ pub async fn start_terminal_auto(
 ) -> Result<(), String> {
     // Retrieve active connection config
     let config = {
-        let guard = db_state.config.lock().unwrap();
-        guard.clone().ok_or("No active database connection found")?
+        let guard = db_state.adapter.lock().await;
+        let adapter = guard.as_ref().ok_or("No active database connection found")?;
+        adapter.get_connection_config()
     };
 
-    let bin = "mysql"; // Simplified for MVP. Ideally detect DB type.
-    
-    // Construct args for mysql
-    // mysql -h host -P port -u user -pPASS
-    let mut args = vec![
-        "-h".to_string(),
-        config.host.clone(),
-        "-P".to_string(),
-        config.port.to_string(),
-        "-u".to_string(),
-        config.user.clone(),
-    ];
+    let bin;
+    let mut args = Vec::new();
 
-    // Password handling
-    // WARNING: Passing password in args is insecure in shared environments (`ps` lists it).
-    // Better approaches: MYSQL_PWD env var or ~/.my.cnf.
-    // For this local-desktop-app MVP, we'll use -pPASSWORD.
-    if !config.pass.is_empty() {
-         args.push(format!("-p{}", config.pass)); // No space for mysql -p
+    match config.db_type {
+        ConnectionType::MySQL => {
+            bin = "mysql".to_string();
+            // mysql -h host -P port -u user -pPASS
+            args.push("-h".to_string());
+            args.push(config.host.clone());
+            args.push("-P".to_string());
+            args.push(config.port.to_string());
+            args.push("-u".to_string());
+            args.push(config.user.clone());
+            
+            if !config.pass.is_empty() {
+                args.push(format!("-p{}", config.pass)); 
+            }
+        },
+        ConnectionType::PostgreSQL => {
+            bin = "psql".to_string();
+            // psql "postgresql://user:pass@host:port/dbname"
+            // or args: -h host -p port -U user -d dbname
+            // We need to clear password potentially if using args, passing via env is better.
+            // PGPASSWORD env var.
+            // But portable-pty allows env vars.
+            
+            args.push("-h".to_string());
+            args.push(config.host.clone());
+            args.push("-p".to_string());
+            args.push(config.port.to_string());
+            args.push("-U".to_string());
+            args.push(config.user.clone());
+            args.push("-d".to_string());
+            args.push(config.current_database.clone().unwrap_or_else(|| "postgres".to_string()));
+            
+            
+            // For password, we'll try to set env var but NativePtySystem might inherit.
+            // We can pass password in connection string but that shows in ps.
+            // But strict requirement: "Seamless".
+            // We will pass env in `start_terminal` if modified to accept it, 
+            // or just set it in current process scope temporarily (bad idea for threaded).
+            
+            // `portable_pty::CommandBuilder` has `env` method.
+            // We need to modify `start_terminal` to accept env map.
+        }
     }
 
-    start_terminal(window, state, id, bin.to_string(), args, None)
+    // Call start_terminal with env if needed
+    start_terminal_with_env(window, state, id, bin, args, None, if config.db_type == ConnectionType::PostgreSQL {
+        let mut map = HashMap::new();
+        map.insert("PGPASSWORD".to_string(), config.pass.clone());
+        Some(map)
+    } else {
+        None
+    })
 }
 
 #[tauri::command]
@@ -75,6 +104,19 @@ pub fn start_terminal(
     bin: String,
     args: Vec<String>,
     cwd: Option<String>,
+) -> Result<(), String> {
+    start_terminal_with_env(window, state, id, bin, args, cwd, None)
+}
+
+// Inner helper
+fn start_terminal_with_env(
+    window: tauri::Window,
+    state: State<'_, TerminalState>,
+    id: String,
+    bin: String,
+    args: Vec<String>,
+    cwd: Option<String>,
+    env: Option<HashMap<String, String>>,
 ) -> Result<(), String> {
     let pty_system = NativePtySystem::default();
 
@@ -89,8 +131,15 @@ pub fn start_terminal(
 
     let mut cmd = CommandBuilder::new(&bin);
     cmd.args(&args);
+    
     if let Some(dir) = cwd {
         cmd.cwd(dir);
+    }
+    
+    if let Some(env_vars) = env {
+        for (k, v) in env_vars {
+            cmd.env(k, v);
+        }
     }
 
     // Spawn the process in the pty
@@ -122,9 +171,6 @@ pub fn start_terminal(
             match reader.read(&mut buf) {
                 Ok(n) if n > 0 => {
                     let data = &buf[..n];
-                    // Emit binary data as base64 or raw string?
-                    // xterm.js handles strings well. We might need specific encoding handling.
-                    // For now, assume UTF-8 lossy, which is generally fine for valid CLI output.
                     let text = String::from_utf8_lossy(data).to_string();
                     if let Err(e) = window.emit("terminal-output", (id_clone.clone(), text)) {
                         eprintln!("Failed to emit terminal output: {}", e);
@@ -135,8 +181,6 @@ pub fn start_terminal(
                 Err(_) => break, // Error
             }
         }
-        // Cleanup on exit?
-        // Ideally we emit an exit event too.
         let _ = window.emit("terminal-exit", id_clone);
     });
 
@@ -179,5 +223,19 @@ pub fn resize_terminal(
         Ok(())
     } else {
         Err("Session not found".to_string())
+    }
+}
+
+#[tauri::command]
+pub fn stop_terminal(
+    state: State<'_, TerminalState>,
+    id: String,
+) -> Result<(), String> {
+    let mut sessions = state.sessions.lock().unwrap();
+    if sessions.remove(&id).is_some() {
+        // Dropping the session (which contains the PtyMaster) should terminate the process.
+        Ok(())
+    } else {
+        Ok(())
     }
 }

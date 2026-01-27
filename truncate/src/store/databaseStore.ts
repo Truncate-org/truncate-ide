@@ -23,6 +23,7 @@ const stripSqlComments = (sql: string): string => {
 };
 
 export type PreviewState = 'idle' | 'loading' | 'result' | 'error';
+export type ConnectionStatus = 'DISCONNECTED' | 'CONNECTING' | 'CONNECTED' | 'ACTIVE';
 
 interface DatabaseStore {
     // Connection State
@@ -30,6 +31,8 @@ interface DatabaseStore {
     isConnecting: boolean;
     connectionError: string | null;
     connectionUser: string | null;
+    connectionType: 'mysql' | 'postgres' | null;
+    connectionStatus: ConnectionStatus;
 
     // Schema State
     databases: string[];
@@ -43,7 +46,7 @@ interface DatabaseStore {
     previewError: string | null;
 
     // Actions
-    connectServer: (host: string, port: number, user: string, pass: string) => Promise<void>;
+    connectServer: (dbType: string, host: string, port: number, user: string, pass: string) => Promise<void>;
     selectDatabase: (dbName: string) => Promise<void>;
     selectTable: (dbName: string, tableName: string) => Promise<void>;
     runQuery: (sql: string) => Promise<void>;
@@ -77,6 +80,8 @@ export const useDatabaseStore = create<DatabaseStore>((set, get) => ({
     isConnecting: false,
     connectionError: null,
     connectionUser: null,
+    connectionType: null,
+    connectionStatus: 'DISCONNECTED',
 
     databases: [],
     activeDatabase: null,
@@ -110,7 +115,7 @@ export const useDatabaseStore = create<DatabaseStore>((set, get) => ({
                 });
                 // Fetch tables for the new DB
                 try {
-                    const tables = await invoke<string[]>('mysql_list_tables', {});
+                    const tables = await invoke<string[]>('list_tables', {});
                     set({ tables });
                 } catch (e) {
                     console.error("Failed to fetch tables after sync:", e);
@@ -119,15 +124,17 @@ export const useDatabaseStore = create<DatabaseStore>((set, get) => ({
         });
     },
 
-    connectServer: async (host, port, user, pass) => {
+    connectServer: async (dbType, host, port, user, pass) => {
         set({ isConnecting: true, connectionError: null });
         try {
-            const databases = await invoke<string[]>('mysql_connect_server', { host, port, user, pass });
+            const databases = await invoke<string[]>('connect_server', { dbType, host, port, user, pass });
             set({
                 isConnected: true,
                 databases,
                 isConnecting: false,
-                connectionUser: user
+                connectionUser: user,
+                connectionType: dbType as 'mysql' | 'postgres',
+                connectionStatus: 'CONNECTED' // Base connection established, but no DB active yet
             });
             get().initializeListeners(); // Start listening
         } catch (error: any) {
@@ -141,9 +148,15 @@ export const useDatabaseStore = create<DatabaseStore>((set, get) => ({
     },
 
     selectDatabase: async (dbName) => {
-        // Reset preview on DB switch
+        // Strict Check: active connecting must exist
+        const { connectionStatus, isConnected } = get();
+        if (!isConnected) {
+            console.warn("Attempted to select database without connection");
+            return;
+        }
+
+        // Reset preview on DB switch (Optimistic UI update for VIEW ports only, NOT connection state)
         set({
-            activeDatabase: dbName,
             tables: [],
             activeTable: null,
             previewState: 'idle',
@@ -154,9 +167,18 @@ export const useDatabaseStore = create<DatabaseStore>((set, get) => ({
         });
 
         try {
-            await invoke('mysql_select_database', { databaseName: dbName });
-            const tables = await invoke<string[]>('mysql_list_tables', {});
-            set({ tables });
+            // BACKEND FIRST: Switch the actual connection context
+            await invoke('select_database', { databaseName: dbName });
+
+            // THEN: Update state to ACTIVE. 
+            // This ensures TerminalPanel seeing 'activeDatabase' implies backend is ready.
+            const tables = await invoke<string[]>('list_tables', {});
+
+            set({
+                activeDatabase: dbName,
+                tables,
+                connectionStatus: 'ACTIVE'
+            });
         } catch (error: any) {
             console.error("Failed to select DB:", error);
             set({ previewState: 'error', previewError: error.toString() });
@@ -171,8 +193,8 @@ export const useDatabaseStore = create<DatabaseStore>((set, get) => ({
         });
 
         try {
-            // Re-use mysql_preview_table but treat it as a query result
-            const data = await invoke<TablePreview>('mysql_preview_table', { databaseName: dbName, tableName });
+            // Re-use preview_table but treat it as a query result
+            const data = await invoke<TablePreview>('preview_table', { databaseName: dbName, tableName });
 
             set({
                 previewState: 'result',
@@ -234,9 +256,9 @@ export const useDatabaseStore = create<DatabaseStore>((set, get) => ({
     },
 
     closeDatabase: () => {
-        invoke('sql_disconnect_database').catch(() => { });
         set({
             activeDatabase: null,
+            connectionStatus: 'CONNECTED', // Downgrade to connected but no DB
             tables: [],
             activeTable: null,
             previewState: 'idle',
@@ -247,7 +269,25 @@ export const useDatabaseStore = create<DatabaseStore>((set, get) => ({
         });
     },
 
-    disconnect: () => {
+    disconnect: async () => {
+        // 1. Set status first (optimistic)
+        set({ connectionStatus: 'DISCONNECTED' });
+
+        try {
+            // 2. Kill Backend Terminal PTY
+            await invoke('stop_terminal', { id: 'term-1' });
+        } catch (e) {
+            console.warn("Failed to stop terminal during disconnect", e);
+        }
+
+        // 3. Close Database Connection
+        try {
+            await invoke('disconnect_database');
+        } catch (e) {
+            console.warn("Failed to disconnect database", e);
+        }
+
+        // 4. Wipe Store State
         set({
             isConnected: false,
             databases: [],
@@ -258,6 +298,8 @@ export const useDatabaseStore = create<DatabaseStore>((set, get) => ({
             previewData: null,
             previewError: null,
             connectionUser: null,
+            connectionType: null,
+            connectionStatus: 'DISCONNECTED',
             exportState: 'idle',
             exportResult: null
         });
@@ -289,7 +331,7 @@ export const useDatabaseStore = create<DatabaseStore>((set, get) => ({
     refreshDatabases: async () => {
         if (!get().isConnected) return;
         try {
-            const databases = await invoke<string[]>('mysql_refresh_databases');
+            const databases = await invoke<string[]>('refresh_databases');
             // Check if active DB was dropped?
             // If active DB is not in new list, maybe deselect it?
             // For now, simple list update is safer.
@@ -305,7 +347,7 @@ export const useDatabaseStore = create<DatabaseStore>((set, get) => ({
 
         try {
             // We reuse the existing list_tables command which uses the active connection state
-            const tables = await invoke<string[]>('mysql_list_tables');
+            const tables = await invoke<string[]>('list_tables');
             set({ tables });
         } catch (error) {
             console.error("[Store] Failed to refresh tables:", error);

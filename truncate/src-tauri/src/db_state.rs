@@ -1,24 +1,14 @@
-use sqlx::mysql::MySqlPool;
-use std::sync::Mutex;
-
-#[derive(Clone)]
-pub struct ConnectionConfig {
-    pub host: String,
-    pub port: u16,
-    pub user: String,
-    pub pass: String,
-}
+use tokio::sync::Mutex;
+use crate::adapter::DbAdapter;
 
 pub struct DbState {
-    pub pool: Mutex<Option<MySqlPool>>,
-    pub config: Mutex<Option<ConnectionConfig>>,
+    pub adapter: Mutex<Option<DbAdapter>>,
 }
 
 impl DbState {
     pub fn new() -> Self {
         Self {
-            pool: Mutex::new(None),
-            config: Mutex::new(None),
+            adapter: Mutex::new(None),
         }
     }
 }

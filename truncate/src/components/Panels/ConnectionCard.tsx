@@ -5,7 +5,8 @@ import { Loader2, AlertCircle } from 'lucide-react';
 export const ConnectionCard: React.FC = () => {
     const { connectServer, isConnecting, connectionError } = useDatabaseStore();
 
-    // Default values as per requirements (MySQL Local)
+    // Default values
+    const [dbType, setDbType] = useState('mysql');
     const [form, setForm] = useState({
         host: 'localhost',
         port: 3306,
@@ -13,9 +14,19 @@ export const ConnectionCard: React.FC = () => {
         password: ''
     });
 
+    const handleTypeChange = (newType: string) => {
+        setDbType(newType);
+        // Auto-update port if user hasn't manually messed with it too much (simple heuristic or just reset)
+        if (newType === 'mysql') setForm(prev => ({ ...prev, port: 3306 }));
+        if (newType === 'postgres') setForm(prev => ({ ...prev, port: 5432 }));
+        // Reset user default if changing type
+        if (newType === 'postgres' && form.user === 'root') setForm(prev => ({ ...prev, user: 'postgres' }));
+        if (newType === 'mysql' && form.user === 'postgres') setForm(prev => ({ ...prev, user: 'root' }));
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        await connectServer(form.host, form.port, form.user, form.password);
+        await connectServer(dbType, form.host, form.port, form.user, form.password);
     };
 
     const handleChange = (field: keyof typeof form, value: string | number) => {
@@ -27,7 +38,27 @@ export const ConnectionCard: React.FC = () => {
             <div className="text-xs text-gray-500 uppercase tracking-wider font-semibold mb-2">No active connection</div>
 
             <form onSubmit={handleSubmit} className="bg-[#252526] rounded border border-[#3e3e3e] p-3 space-y-3">
-                <div className="font-medium text-sm text-gray-300 mb-2">MySQL (Local)</div>
+
+                {/* Connection Type */}
+                <div className="space-y-1">
+                    <label className="text-[10px] uppercase text-gray-500 font-semibold">Database Type</label>
+                    <div className="flex bg-[#1e1e1e] border border-[#3e3e3e] rounded p-0.5">
+                        <button
+                            type="button"
+                            onClick={() => handleTypeChange('mysql')}
+                            className={`flex-1 text-xs py-1 rounded transition-colors ${dbType === 'mysql' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-300'}`}
+                        >
+                            MySQL
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => handleTypeChange('postgres')}
+                            className={`flex-1 text-xs py-1 rounded transition-colors ${dbType === 'postgres' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-300'}`}
+                        >
+                            PostgreSQL
+                        </button>
+                    </div>
+                </div>
 
                 {/* Host */}
                 <div className="space-y-1">
@@ -49,7 +80,7 @@ export const ConnectionCard: React.FC = () => {
                         value={form.port}
                         onChange={e => handleChange('port', parseInt(e.target.value) || 0)}
                         className="w-full bg-[#1e1e1e] border border-[#3e3e3e] rounded px-2 py-1 text-xs text-gray-300 focus:border-blue-500 focus:outline-none transition-colors"
-                        placeholder="3306"
+                        placeholder={dbType === 'mysql' ? "3306" : "5432"}
                     />
                 </div>
 
@@ -61,7 +92,7 @@ export const ConnectionCard: React.FC = () => {
                         value={form.user}
                         onChange={e => handleChange('user', e.target.value)}
                         className="w-full bg-[#1e1e1e] border border-[#3e3e3e] rounded px-2 py-1 text-xs text-gray-300 focus:border-blue-500 focus:outline-none transition-colors"
-                        placeholder="root"
+                        placeholder={dbType === 'mysql' ? "root" : "postgres"}
                     />
                 </div>
 
