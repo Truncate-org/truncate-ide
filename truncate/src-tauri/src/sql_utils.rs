@@ -75,7 +75,7 @@ pub fn extract_db_name(sql: &str) -> Option<String> {
 
 pub fn is_safe_for_mvp(sql_type: &SqlType) -> bool {
     match sql_type {
-        SqlType::Select | SqlType::Show | SqlType::Describe | SqlType::Use => true,
+        SqlType::Select | SqlType::Show | SqlType::Describe | SqlType::Use | SqlType::Create | SqlType::Drop | SqlType::Alter => true,
         _ => false,
     }
 }

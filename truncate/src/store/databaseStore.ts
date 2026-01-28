@@ -31,7 +31,7 @@ interface DatabaseStore {
     isConnecting: boolean;
     connectionError: string | null;
     connectionUser: string | null;
-    connectionType: 'mysql' | 'postgres' | null;
+    connectionType: 'mysql' | 'postgres' | 'sqlite' | null;
     connectionStatus: ConnectionStatus;
 
     // Schema State
@@ -122,6 +122,11 @@ export const useDatabaseStore = create<DatabaseStore>((set, get) => ({
                 }
             }
         });
+
+        listen('schema-changed', async () => {
+            console.log("[Store] Schema Changed detected, refreshing tables");
+            await get().refreshTables();
+        });
     },
 
     connectServer: async (dbType, host, port, user, pass) => {
@@ -133,7 +138,7 @@ export const useDatabaseStore = create<DatabaseStore>((set, get) => ({
                 databases,
                 isConnecting: false,
                 connectionUser: user,
-                connectionType: dbType as 'mysql' | 'postgres',
+                connectionType: dbType as 'mysql' | 'postgres' | 'sqlite',
                 connectionStatus: 'CONNECTED' // Base connection established, but no DB active yet
             });
             get().initializeListeners(); // Start listening

@@ -6,6 +6,7 @@ pub mod types;
 pub mod adapter;
 pub mod mysql_adapter;
 pub mod postgres_adapter;
+pub mod sqlite_adapter;
 pub mod db_state;
 pub mod sql_utils;
 pub mod schema;
@@ -15,6 +16,7 @@ use crate::db_state::DbState;
 use crate::adapter::{DatabaseAdapter, DbAdapter};
 use crate::mysql_adapter::MySqlAdapter;
 use crate::postgres_adapter::PostgresAdapter;
+use crate::sqlite_adapter::SqliteAdapter;
 use crate::types::{QueryResult, TablePreview};
 use crate::terminal::{TerminalState, start_terminal, write_terminal, resize_terminal, start_terminal_auto, stop_terminal};
 
@@ -31,6 +33,7 @@ async fn connect_server(
     let mut adapter = match db_type.as_str() {
         "mysql" => DbAdapter::MySql(MySqlAdapter::new(&host, port, &user, &pass)),
         "postgres" => DbAdapter::Postgres(PostgresAdapter::new(&host, port, &user, &pass)),
+        "sqlite" => DbAdapter::Sqlite(SqliteAdapter::new(&host)), // Host contains file path
         _ => return Err(format!("Unsupported database type: {}", db_type)),
     };
 
@@ -88,7 +91,23 @@ async fn sql_run_query(
 ) -> Result<QueryResult, String> {
     let guard = state.adapter.lock().await;
     let adapter = guard.as_ref().ok_or("No active connection")?;
-    adapter.execute_query(&sql).await
+    
+    let result = adapter.execute_query(&sql).await?;
+    
+    // Check for schema changes
+    if let Some(stmt) = crate::sql_utils::get_last_statement(&sql) {
+        let sql_type = crate::sql_utils::get_sql_type(&stmt);
+        match sql_type {
+            crate::sql_utils::SqlType::Create | 
+            crate::sql_utils::SqlType::Drop | 
+            crate::sql_utils::SqlType::Alter => {
+                let _ = window.emit("schema-changed", ());
+            },
+            _ => {}
+        }
+    }
+
+    Ok(result)
 }
 
 #[tauri::command]
@@ -133,6 +152,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_dialog::init())
         .manage(DbState::new())
         .manage(TerminalState::new())
         .invoke_handler(tauri::generate_handler![
