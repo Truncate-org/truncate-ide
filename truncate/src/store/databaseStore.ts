@@ -61,8 +61,18 @@ interface DatabaseStore {
     refreshDatabases: () => Promise<void>;
     refreshTables: () => Promise<void>;
 
+    // CSV Support
+    inspectCsv: (path: string) => Promise<CsvInspection>;
+
     // Internal
     initializeListeners: () => void;
+}
+
+export interface CsvInspection {
+    columns: string[];
+    types: string[];
+    separator: string;
+    preview: string[][];
 }
 
 export interface ExportResult {
@@ -357,6 +367,10 @@ export const useDatabaseStore = create<DatabaseStore>((set, get) => ({
         } catch (error) {
             console.error("[Store] Failed to refresh tables:", error);
         }
+    },
+
+    inspectCsv: async (path: string) => {
+        return await invoke<CsvInspection>('inspect_csv', { path });
     }
 }));
 

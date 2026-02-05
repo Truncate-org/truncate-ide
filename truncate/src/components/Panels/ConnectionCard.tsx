@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { useDatabaseStore } from '../../store/databaseStore';
+import { useDatabaseStore, CsvInspection } from '../../store/databaseStore';
 import { Loader2, AlertCircle, FolderOpen } from 'lucide-react';
 import { open } from '@tauri-apps/plugin-dialog';
+import { CsvPreviewModal } from '../Modals/CsvPreviewModal';
 
 export const ConnectionCard: React.FC = () => {
-    const { connectServer, isConnecting, connectionError } = useDatabaseStore();
+    const { connectServer, isConnecting, connectionError, inspectCsv } = useDatabaseStore();
 
     // Default values
     const [dbType, setDbType] = useState('mysql');
@@ -13,8 +14,11 @@ export const ConnectionCard: React.FC = () => {
         port: 3306,
         user: 'root',
         password: '',
-        filePath: '' // New field for SQLite
+        filePath: '' // New field for SQLite/CSV
     });
+
+    const [showCsvModal, setShowCsvModal] = useState(false);
+    const [csvInspection, setCsvInspection] = useState<CsvInspection | null>(null);
 
     const handleTypeChange = (newType: string) => {
         setDbType(newType);
@@ -28,20 +32,26 @@ export const ConnectionCard: React.FC = () => {
 
     const handleFilePick = async () => {
         try {
+            const filters = dbType === 'csv' ? [{
+                name: 'CSV Files',
+                extensions: ['csv', 'tsv', 'tab', 'txt']
+            }, {
+                name: 'All Files',
+                extensions: ['*']
+            }] : [{
+                name: 'SQLite Database',
+                extensions: ['db', 'sqlite', 'sqlite3', 'db3', 's3db', 'sl3']
+            }, {
+                name: 'All Files',
+                extensions: ['*']
+            }];
+
             const selected = await open({
                 multiple: false,
-                filters: [{
-                    name: 'SQLite Database',
-                    extensions: ['db', 'sqlite', 'sqlite3', 'db3', 's3db', 'sl3']
-                }, {
-                    name: 'All Files',
-                    extensions: ['*']
-                }]
+                filters: filters
             });
+
             if (selected) {
-                // The open dialog returns string if multiple=false, or null
-                // Wait, check types. It returns string | string[] | null.
-                // With multiple: false, it returns string | null.
                 if (typeof selected === 'string') {
                     setForm(prev => ({ ...prev, filePath: selected }));
                 }
@@ -53,14 +63,41 @@ export const ConnectionCard: React.FC = () => {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        // If sqlite, pass filePath as host (hacky but fits existing signature)
+
         if (dbType === 'sqlite') {
             if (!form.filePath) return;
-            // connectServer signature: (dbType, host, port, user, pass)
-            // We pass empty port/user/pass for sqlite
             await connectServer(dbType, form.filePath, 0, '', '');
+        } else if (dbType === 'csv') {
+            if (!form.filePath) return;
+            // Inspect first
+            try {
+                // We don't have a loading state for inspection specifically, but we can reuse isConnecting or local
+                // But connectServer sets isConnecting globally.
+                // Let's use local state or just optimistic UI.
+                // Or call store action? But store doesn't have inspection state.
+                const data = await inspectCsv(form.filePath);
+                setCsvInspection(data);
+                setShowCsvModal(true);
+            } catch (e) {
+                console.error("CSV Inspection failed", e);
+                // Show error somehow? Maybe alert or toast. 
+                // For now, let's use connectionError if we can inject it? No, store has it.
+                // We'll just alert for now or set error in UI.
+                alert(`Failed to inspect CSV: ${e}`);
+            }
         } else {
             await connectServer(dbType, form.host, form.port, form.user, form.password);
+        }
+    };
+
+    const handleCsvConfirm = async (config: any) => {
+        try {
+            // Pass config JSON as user field (hacky but standard)
+            await connectServer('csv', form.filePath, 0, JSON.stringify(config), '');
+            setShowCsvModal(false);
+        } catch (e) {
+            console.error("Failed to connect CSV", e);
+            // Error is handled in store, shown in UI
         }
     };
 
@@ -86,6 +123,7 @@ export const ConnectionCard: React.FC = () => {
                             <option value="mysql">MySQL</option>
                             <option value="postgres">PostgreSQL</option>
                             <option value="sqlite">SQLite</option>
+                            <option value="csv">CSV File</option>
                         </select>
                         <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none text-gray-500">
                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -95,16 +133,18 @@ export const ConnectionCard: React.FC = () => {
                     </div>
                 </div>
 
-                {dbType === 'sqlite' ? (
+                {dbType === 'sqlite' || dbType === 'csv' ? (
                     <div className="space-y-1">
-                        <label className="text-[10px] uppercase text-gray-500 font-semibold">Database File</label>
+                        <label className="text-[10px] uppercase text-gray-500 font-semibold">
+                            {dbType === 'csv' ? 'CSV File' : 'Database File'}
+                        </label>
                         <div className="flex gap-2">
                             <input
                                 type="text"
                                 readOnly
                                 value={form.filePath}
                                 className="flex-1 bg-[#1e1e1e] border border-[#3e3e3e] rounded px-2 py-1 text-xs text-gray-300 focus:outline-none cursor-not-allowed opacity-70"
-                                placeholder="Select a .db or .sqlite file"
+                                placeholder={dbType === 'csv' ? "Select .csv or .tsv file" : "Select a .db or .sqlite file"}
                             />
                             <button
                                 type="button"
@@ -176,7 +216,7 @@ export const ConnectionCard: React.FC = () => {
 
                 <button
                     type="submit"
-                    disabled={isConnecting || (dbType === 'sqlite' && !form.filePath)}
+                    disabled={isConnecting || ((dbType === 'sqlite' || dbType === 'csv') && !form.filePath)}
                     className="w-full bg-blue-600 hover:bg-blue-500 text-white font-medium py-1.5 rounded text-xs flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     {isConnecting ? (
@@ -185,10 +225,19 @@ export const ConnectionCard: React.FC = () => {
                             Connecting...
                         </>
                     ) : (
-                        '[ Connect ]'
+                        dbType === 'csv' ? '[ Preview & Connect ]' : '[ Connect ]'
                     )}
                 </button>
             </form>
+
+            <CsvPreviewModal
+                isOpen={showCsvModal}
+                onClose={() => setShowCsvModal(false)}
+                onConfirm={handleCsvConfirm}
+                inspection={csvInspection}
+                filePath={form.filePath}
+                isConnecting={isConnecting}
+            />
         </div>
     );
 };

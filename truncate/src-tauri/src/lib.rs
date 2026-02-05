@@ -5,6 +5,7 @@ use tauri::Manager; // For path access
 pub mod types;
 pub mod adapter;
 pub mod mysql_adapter;
+pub mod csv_adapter;
 pub mod postgres_adapter;
 pub mod sqlite_adapter;
 pub mod db_state;
@@ -17,8 +18,14 @@ use crate::adapter::{DatabaseAdapter, DbAdapter};
 use crate::mysql_adapter::MySqlAdapter;
 use crate::postgres_adapter::PostgresAdapter;
 use crate::sqlite_adapter::SqliteAdapter;
+use crate::csv_adapter::CsvAdapter;
 use crate::types::{QueryResult, TablePreview};
 use crate::terminal::{TerminalState, start_terminal, write_terminal, resize_terminal, start_terminal_auto, stop_terminal};
+
+#[tauri::command]
+async fn inspect_csv(path: String) -> Result<crate::types::CsvInspection, String> {
+    crate::csv_adapter::inspect_csv(&path)
+}
 
 #[tauri::command]
 async fn connect_server(
@@ -34,6 +41,7 @@ async fn connect_server(
         "mysql" => DbAdapter::MySql(MySqlAdapter::new(&host, port, &user, &pass)),
         "postgres" => DbAdapter::Postgres(PostgresAdapter::new(&host, port, &user, &pass)),
         "sqlite" => DbAdapter::Sqlite(SqliteAdapter::new(&host)), // Host contains file path
+        "csv" => DbAdapter::Csv(CsvAdapter::new(&host, &user)?), // Host=path, User=config_json
         _ => return Err(format!("Unsupported database type: {}", db_type)),
     };
 
@@ -168,7 +176,8 @@ pub fn run() {
             resize_terminal,
             start_terminal_auto,
             stop_terminal,
-            refresh_databases
+            refresh_databases,
+            inspect_csv
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

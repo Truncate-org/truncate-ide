@@ -11,8 +11,8 @@ use crate::schema::{Schema, Table, Column as SchemaColumn, ForeignKey};
 use crate::sql_utils::{get_sql_type, is_safe_for_mvp, has_limit_clause, validate_sql_structure, get_last_statement, SqlType};
 
 pub struct SqliteAdapter {
-    pool: Option<SqlitePool>,
-    file_path: String,
+    pub(crate) pool: Option<SqlitePool>,
+    pub(crate) file_path: String,
     conn_config: ConnectionConfig,
     max_connections: u32,
     acquire_timeout: Duration,

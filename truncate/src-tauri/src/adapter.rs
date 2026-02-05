@@ -3,6 +3,7 @@ pub enum ConnectionType {
     MySQL,
     PostgreSQL,
     SQLite,
+    Csv,
 }
 
 #[derive(Clone, Debug)]
@@ -19,6 +20,7 @@ use crate::types::{QueryResult, TablePreview};
 use crate::mysql_adapter::MySqlAdapter;
 use crate::postgres_adapter::PostgresAdapter;
 use crate::sqlite_adapter::SqliteAdapter;
+use crate::csv_adapter::CsvAdapter;
 use async_trait::async_trait;
 
 #[async_trait]
@@ -39,6 +41,7 @@ pub enum DbAdapter {
     MySql(MySqlAdapter),
     Postgres(PostgresAdapter),
     Sqlite(SqliteAdapter),
+    Csv(CsvAdapter),
 }
 
 #[async_trait]
@@ -48,6 +51,7 @@ impl DatabaseAdapter for DbAdapter {
             DbAdapter::MySql(a) => a.connect().await,
             DbAdapter::Postgres(a) => a.connect().await,
             DbAdapter::Sqlite(a) => a.connect().await,
+            DbAdapter::Csv(a) => a.connect().await,
         }
     }
 
@@ -56,6 +60,7 @@ impl DatabaseAdapter for DbAdapter {
             DbAdapter::MySql(a) => a.list_databases().await,
             DbAdapter::Postgres(a) => a.list_databases().await,
             DbAdapter::Sqlite(a) => a.list_databases().await,
+            DbAdapter::Csv(a) => a.list_databases().await,
         }
     }
 
@@ -64,6 +69,7 @@ impl DatabaseAdapter for DbAdapter {
             DbAdapter::MySql(a) => a.switch_database(db_name).await,
             DbAdapter::Postgres(a) => a.switch_database(db_name).await,
             DbAdapter::Sqlite(a) => a.switch_database(db_name).await,
+            DbAdapter::Csv(a) => a.switch_database(db_name).await,
         }
     }
 
@@ -72,6 +78,7 @@ impl DatabaseAdapter for DbAdapter {
             DbAdapter::MySql(a) => a.execute_query(sql).await,
             DbAdapter::Postgres(a) => a.execute_query(sql).await,
             DbAdapter::Sqlite(a) => a.execute_query(sql).await,
+            DbAdapter::Csv(a) => a.execute_query(sql).await,
         }
     }
 
@@ -80,6 +87,7 @@ impl DatabaseAdapter for DbAdapter {
             DbAdapter::MySql(a) => a.preview_table(table_name).await,
             DbAdapter::Postgres(a) => a.preview_table(table_name).await,
             DbAdapter::Sqlite(a) => a.preview_table(table_name).await,
+            DbAdapter::Csv(a) => a.preview_table(table_name).await,
         }
     }
 
@@ -88,6 +96,7 @@ impl DatabaseAdapter for DbAdapter {
             DbAdapter::MySql(a) => a.list_tables().await,
             DbAdapter::Postgres(a) => a.list_tables().await,
             DbAdapter::Sqlite(a) => a.list_tables().await,
+            DbAdapter::Csv(a) => a.list_tables().await,
         }
     }
 
@@ -96,6 +105,7 @@ impl DatabaseAdapter for DbAdapter {
             DbAdapter::MySql(a) => a.disconnect().await,
             DbAdapter::Postgres(a) => a.disconnect().await,
             DbAdapter::Sqlite(a) => a.disconnect().await,
+            DbAdapter::Csv(a) => a.disconnect().await,
         }
     }
 
@@ -104,6 +114,7 @@ impl DatabaseAdapter for DbAdapter {
             DbAdapter::MySql(a) => a.get_current_database().await,
             DbAdapter::Postgres(a) => a.get_current_database().await,
             DbAdapter::Sqlite(a) => a.get_current_database().await,
+            DbAdapter::Csv(a) => a.get_current_database().await,
         }
     }
 
@@ -112,6 +123,7 @@ impl DatabaseAdapter for DbAdapter {
             DbAdapter::MySql(a) => a.get_connection_config(),
             DbAdapter::Postgres(a) => a.get_connection_config(),
             DbAdapter::Sqlite(a) => a.get_connection_config(),
+            DbAdapter::Csv(a) => a.get_connection_config(),
         }
     }
 
@@ -120,6 +132,7 @@ impl DatabaseAdapter for DbAdapter {
             DbAdapter::MySql(a) => a.extract_schema(db_name).await,
             DbAdapter::Postgres(a) => a.extract_schema(db_name).await,
             DbAdapter::Sqlite(a) => a.extract_schema(db_name).await,
+            DbAdapter::Csv(a) => a.extract_schema(db_name).await,
         }
     }
 }

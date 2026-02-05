@@ -13,3 +13,12 @@ pub enum QueryResult {
     ResultSet(TablePreview),
     Success(String),
 }
+
+#[derive(Serialize, Clone, Debug)]
+pub struct CsvInspection {
+    pub columns: Vec<String>,
+    pub types: Vec<String>, // "INTEGER", "REAL", "TEXT"
+    pub separator: char,
+    pub preview: Vec<Vec<String>>,
+}
+

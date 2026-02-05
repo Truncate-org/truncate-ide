@@ -84,7 +84,7 @@ pub async fn start_terminal_auto(
             // `portable_pty::CommandBuilder` has `env` method.
             // We need to modify `start_terminal` to accept env map.
         },
-        ConnectionType::SQLite => {
+        ConnectionType::SQLite | ConnectionType::Csv => {
             bin = "sqlite3".to_string();
             if let Some(db_path) = config.current_database {
                 args.push(db_path);
