@@ -1,8 +1,7 @@
 import React from 'react';
 import { useDatabaseStore } from '../../store/databaseStore';
 import { ConnectionCard } from './ConnectionCard';
-import { Database, Table, Play, Power, ArrowLeft, Download, Loader2, FolderOpen } from 'lucide-react';
-import { openPath } from '@tauri-apps/plugin-opener';
+import { Database, Table, ChevronDown, Layers, LogOut, Link } from 'lucide-react';
 import clsx from 'clsx';
 
 const DatabaseExplorer: React.FC = () => {
@@ -15,187 +14,154 @@ const DatabaseExplorer: React.FC = () => {
         selectDatabase,
         selectTable,
         closeDatabase,
-        disconnect,
         connectionUser,
-        exportSchema,
-        exportState,
-        exportResult
+        connectionType
     } = useDatabaseStore();
 
-    return (
-        <div className="flex flex-col h-full bg-[#1e1e1e] text-gray-300">
-            {/* Header */}
-            <div className="h-9 border-b border-[#3e3e3e] flex items-center justify-between px-3 font-semibold text-white select-none bg-[#252526]">
-                <div className="flex items-center gap-2">
-                    <Database className="w-3.5 h-3.5 text-gray-400" />
-                    <span className="text-xs uppercase tracking-wide">
-                        {activeDatabase ? 'Explorer' : 'Databases'}
-                    </span>
-                </div>
-                {isConnected && !activeDatabase && (
-                    <button
-                        onClick={disconnect}
-                        className="p-1 hover:bg-[#3e3e3e] rounded text-gray-400 hover:text-white transition-colors"
-                        title="Disconnect Server"
-                    >
-                        <Power className="w-3.5 h-3.5 text-red-400" />
-                    </button>
-                )}
+    // Local state to toggle between database list and connection form
+    const [showConnectionForm, setShowConnectionForm] = React.useState(false);
+
+    // Reset connection form view when successfully connected
+    React.useEffect(() => {
+        if (isConnected && databases.length > 0) {
+            setShowConnectionForm(false);
+        }
+    }, [isConnected, databases]);
+
+    // Always show connection form when not connected
+    if (!isConnected) {
+        return (
+            <div className="flex flex-col h-full bg-panel text-gray-300 p-4">
+                <ConnectionCard />
             </div>
+        );
+    }
 
-            <div className="flex-1 overflow-auto">
-                {/* State 1: No Connection */}
-                {!isConnected && (
-                    <ConnectionCard />
-                )}
+    // Show connection form when user clicks "New Connection" button
+    if (showConnectionForm) {
+        return (
+            <div className="flex flex-col h-full bg-panel text-gray-300 p-4">
+                <ConnectionCard />
+            </div>
+        );
+    }
 
-                {/* State 2 & 3: Connected */}
-                {isConnected && (
-                    <div className="p-2 space-y-2">
-
-                        {/* 
-                            VIEW MODE 1: LIST MODE
-                            Show only if NO database is active.
-                        */}
-                        {!activeDatabase && (
-                            <>
-                                {/* Server Info Header */}
-                                <div className="px-2 py-1 text-xs text-green-500 flex items-center gap-2 mb-2">
-                                    <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                                    <span className="font-mono">{connectionUser || 'Unknown'}</span>
-                                </div>
-
-                                <div className="space-y-1">
-                                    {databases.map((dbName) => (
-                                        <div key={dbName} className="select-none group">
-                                            <div
-                                                className="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer transition-colors hover:bg-[#2a2d2e] text-gray-400"
-                                            >
-                                                <Database className="w-3.5 h-3.5 text-gray-500" />
-                                                <span className="flex-1 truncate text-xs">{dbName}</span>
-
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        selectDatabase(dbName);
-                                                    }}
-                                                    className="opacity-0 group-hover:opacity-100 p-1 hover:bg-[#4e4e4e] rounded text-green-400 transition-opacity"
-                                                    title="Connect"
-                                                >
-                                                    <Play className="w-3 h-3 fill-current" />
-                                                </button>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </>
-                        )}
-
-                        {/* 
-                            VIEW MODE 2: ACTIVE DATABASE (FOCUS MODE)
-                            Show only if A database IS active.
-                        */}
-                        {activeDatabase && (
-                            <div className="animate-in fade-in slide-in-from-right-4 duration-200">
-                                {/* Active DB Header with Disconnect */}
-                                <div className="mb-4 pb-2 border-b border-[#3e3e3e]">
-                                    <div className="flex items-center justify-between px-1 mb-2">
-                                        <div className="font-bold text-white flex items-center gap-2">
-                                            <Database className="w-3.5 h-3.5 text-blue-500" />
-                                            <span className="text-sm">{activeDatabase}</span>
-                                        </div>
-                                        <div className="px-1.5 py-0.5 rounded text-[9px] uppercase tracking-wider bg-blue-900/30 text-blue-400 border border-blue-800/50">
-                                            Active
-                                        </div>
-                                    </div>
-
-                                    <div className="flex gap-2">
-                                        <button
-                                            onClick={exportSchema}
-                                            disabled={exportState === 'loading'}
-                                            className="flex-1 flex items-center justify-center gap-2 px-3 py-1 bg-[#2a2d2e] hover:bg-[#323638] text-gray-400 hover:text-white text-[10px] uppercase tracking-wide rounded transition-colors border border-[#3e3e3e] disabled:opacity-50"
-                                            title="Export Schema to JSON & DOT"
-                                        >
-                                            {exportState === 'loading' ? (
-                                                <Loader2 className="w-3 h-3 animate-spin" />
-                                            ) : (
-                                                <Download className="w-3 h-3" />
-                                            )}
-                                            {exportState === 'loading' ? 'Exporting...' : 'Export Schema'}
-                                        </button>
-                                        <button
-                                            onClick={closeDatabase}
-                                            className="flex items-center justify-center gap-2 px-3 py-1 bg-[#2a2d2e] hover:bg-[#323638] text-gray-400 hover:text-white text-[10px] uppercase tracking-wide rounded transition-colors border border-[#3e3e3e]"
-                                            title="Disconnect Database"
-                                        >
-                                            <ArrowLeft className="w-3 h-3" />
-                                        </button>
-                                    </div>
-
-                                    {exportState === 'success' && (
-                                        <div className="mt-2 flex flex-col gap-1">
-                                            <div className="px-2 py-1 bg-green-900/20 border border-green-800 rounded text-[10px] text-green-400">
-                                                {exportResult?.message}
-                                            </div>
-
-                                            <button
-                                                onClick={async () => {
-                                                    if (exportResult?.export_dir) {
-                                                        try {
-                                                            await openPath(exportResult.export_dir);
-                                                        } catch (e) {
-                                                            console.error("Failed to open path", e);
-                                                        }
-                                                    }
-                                                }}
-                                                className="flex items-center justify-center gap-1.5 px-2 py-1 bg-green-800/20 hover:bg-green-800/40 border border-green-800 rounded text-green-400 text-[10px] transition-colors"
-                                            >
-                                                <FolderOpen className="w-3 h-3" />
-                                                Open Export Folder
-                                            </button>
-                                        </div>
-                                    )}
-
-                                    {exportState === 'error' && (
-                                        <div className="mt-2 px-2 py-1 bg-red-900/20 border border-red-800 rounded text-[10px] text-red-400 break-words">
-                                            Error: {exportResult?.message}
-                                        </div>
-                                    )}
-                                </div>
-
-                                {/* Tables List */}
-                                <div className="space-y-0.5">
-                                    <div className="px-2 py-1 text-[10px] font-semibold text-gray-600 uppercase tracking-widest mb-1">
-                                        Tables
-                                    </div>
-
-                                    {tables.length === 0 ? (
-                                        <div className="px-2 py-4 text-center text-xs text-gray-500 italic">
-                                            No tables found.
-                                        </div>
-                                    ) : (
-                                        tables.map(table => (
-                                            <div
-                                                key={table}
-                                                onClick={() => selectTable(activeDatabase, table)}
-                                                className={clsx(
-                                                    "flex items-center gap-2 px-2 py-1 rounded cursor-pointer transition-colors text-xs",
-                                                    activeTable === table
-                                                        ? "bg-[#094771] text-white font-medium"
-                                                        : "text-gray-400 hover:bg-[#2a2d2e] hover:text-gray-300"
-                                                )}
-                                            >
-                                                <Table className={clsx("w-3 h-3", activeTable === table ? "text-blue-200" : "text-gray-500")} />
-                                                <span className="truncate">{table}</span>
-                                            </div>
-                                        ))
-                                    )}
-                                </div>
-                            </div>
-                        )}
-
+    // SERVER-LEVEL VIEW: No active database selected
+    if (!activeDatabase) {
+        return (
+            <div className="h-full bg-panel text-gray-300 select-none overflow-y-auto font-sans text-[13px]">
+                <div className="flex flex-col">
+                    {/* Header with New Connection Button */}
+                    <div className="flex items-center justify-between px-2 py-2 text-gray-300 font-medium border-b border-subtle">
+                        <div className="flex items-center gap-1.5 text-blue-400">
+                            <Layers className="w-3.5 h-3.5" />
+                            <span>{connectionUser || connectionType || 'Connection'}</span>
+                        </div>
+                        <button
+                            onClick={() => setShowConnectionForm(true)}
+                            className="px-2 py-0.5 text-[10px] font-medium text-gray-400 hover:text-blue-400 hover:bg-subtle rounded transition-colors"
+                            title="Add or change connection"
+                        >
+                            <Link className="w-3 h-3" />
+                        </button>
                     </div>
-                )}
+
+                    {/* Database List with Connect Buttons */}
+                    <div className="flex flex-col p-2 gap-1">
+                        {databases.length === 0 ? (
+                            <div className="px-2 py-4 text-xs text-gray-600 italic text-center">
+                                No databases found
+                            </div>
+                        ) : (
+                            databases.map((dbName) => (
+                                <div
+                                    key={dbName}
+                                    className="flex items-center justify-between px-2 py-1.5 hover:bg-subtle rounded transition-colors group"
+                                >
+                                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                                        <Database className="w-3.5 h-3.5 text-gray-500 shrink-0" />
+                                        <span className="text-gray-300 truncate">{dbName}</span>
+                                    </div>
+                                    <button
+                                        onClick={() => selectDatabase(dbName)}
+                                        className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium text-blue-400 border border-blue-400/30 rounded hover:bg-blue-400/10 transition-colors shrink-0 opacity-0 group-hover:opacity-100"
+                                        title={`Connect to ${dbName}`}
+                                    >
+                                        <Link className="w-3 h-3" />
+                                        Connect
+                                    </button>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // DATABASE-LEVEL VIEW: Active database selected
+    return (
+        <div className="h-full bg-panel text-gray-300 select-none overflow-y-auto font-sans text-[13px]">
+            <div className="flex flex-col">
+                {/* Header with Back Button */}
+                <div className="flex items-center justify-between px-2 py-2 border-b border-subtle">
+                    <button
+                        onClick={closeDatabase}
+                        className="flex items-center gap-1 px-2 py-1 text-blue-400 hover:bg-subtle rounded transition-colors"
+                        title="Back to database list"
+                    >
+                        <ChevronDown className="w-3.5 h-3.5 rotate-90" />
+                        <span className="text-xs font-medium">Databases</span>
+                    </button>
+                    <div className="flex items-center gap-1.5 text-[10px] text-gray-500">
+                        <span>Connected:</span>
+                        <span className="text-blue-400 font-medium">{activeDatabase}</span>
+                    </div>
+                </div>
+
+                {/* Active Database with Tables */}
+                <div className="flex flex-col">
+                    <div className="flex items-center justify-between px-2 py-1 pl-6 bg-[#094771]/20 border-l-2 border-blue-400 group">
+                        <div className="flex items-center gap-1 flex-1 min-w-0">
+                            <ChevronDown className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                            <Database className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                            <span className="text-white truncate">{activeDatabase}</span>
+                        </div>
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                closeDatabase();
+                            }}
+                            className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium text-gray-400 hover:text-white hover:bg-subtle rounded transition-colors shrink-0 opacity-0 group-hover:opacity-100"
+                            title="Disconnect from database"
+                        >
+                            <LogOut className="w-3 h-3" />
+                        </button>
+                    </div>
+
+                    {/* Tables */}
+                    <div className="flex flex-col pb-1">
+                        {tables.length === 0 ? (
+                            <div className="pl-14 py-2 text-xs text-gray-600 italic">No tables</div>
+                        ) : (
+                            tables.map((tableName: string) => (
+                                <div
+                                    key={tableName}
+                                    onClick={() => selectTable(activeDatabase, tableName)}
+                                    className={clsx(
+                                        "flex items-center gap-2 px-2 py-1 pl-12 cursor-pointer transition-colors border-l-2",
+                                        activeTable === tableName
+                                            ? "bg-[#094771] text-white border-blue-400"
+                                            : "border-transparent text-gray-400 hover:bg-subtle hover:text-gray-300"
+                                    )}
+                                >
+                                    <Table className={clsx("w-3.5 h-3.5 shrink-0", activeTable === tableName ? "text-blue-200" : "text-gray-500")} />
+                                    <span className="truncate">{tableName}</span>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                </div>
             </div>
         </div>
     );

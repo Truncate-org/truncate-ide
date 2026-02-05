@@ -4,11 +4,6 @@ import AiPromptBox from './AiPromptBox.tsx';
 const AiAssistant: React.FC = () => {
     return (
         <div className="flex flex-col h-full bg-panel">
-            <div className="h-10 border-b border-subtle flex items-center px-4 justify-between select-none">
-                <span className="font-semibold text-primary">AI Assistant</span>
-                <span className="px-1.5 py-0.5 rounded text-[10px] bg-accent/10 text-accent border border-accent/20">Local • Offline</span>
-            </div>
-
             <div className="flex-1 overflow-y-auto p-4 space-y-6">
                 {/* User Message */}
                 <div className="flex justify-end">

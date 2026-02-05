@@ -31,7 +31,8 @@ interface DatabaseStore {
     isConnecting: boolean;
     connectionError: string | null;
     connectionUser: string | null;
-    connectionType: 'mysql' | 'postgres' | 'sqlite' | null;
+    connectionHost: string | null;
+    connectionType: 'mysql' | 'postgres' | 'sqlite' | 'csv' | null;
     connectionStatus: ConnectionStatus;
 
     // Schema State
@@ -90,6 +91,7 @@ export const useDatabaseStore = create<DatabaseStore>((set, get) => ({
     isConnecting: false,
     connectionError: null,
     connectionUser: null,
+    connectionHost: null,
     connectionType: null,
     connectionStatus: 'DISCONNECTED',
 
@@ -137,6 +139,17 @@ export const useDatabaseStore = create<DatabaseStore>((set, get) => ({
             console.log("[Store] Schema Changed detected, refreshing tables");
             await get().refreshTables();
         });
+
+        // Listen for queries executed from Terminal (or other sources)
+        listen<QueryResult>('query-executed', (event) => {
+            console.log("[Store] Query Executed Event:", event.payload);
+            set({
+                previewState: 'result',
+                previewData: event.payload,
+                previewError: null,
+                activeTable: null // Clear active table selection as this is a custom query result
+            });
+        });
     },
 
     connectServer: async (dbType, host, port, user, pass) => {
@@ -148,7 +161,8 @@ export const useDatabaseStore = create<DatabaseStore>((set, get) => ({
                 databases,
                 isConnecting: false,
                 connectionUser: user,
-                connectionType: dbType as 'mysql' | 'postgres' | 'sqlite',
+                connectionHost: host, // Store host (path for sqlite/csv)
+                connectionType: dbType as 'mysql' | 'postgres' | 'sqlite' | 'csv',
                 connectionStatus: 'CONNECTED' // Base connection established, but no DB active yet
             });
             get().initializeListeners(); // Start listening
@@ -164,7 +178,7 @@ export const useDatabaseStore = create<DatabaseStore>((set, get) => ({
 
     selectDatabase: async (dbName) => {
         // Strict Check: active connecting must exist
-        const { connectionStatus, isConnected } = get();
+        const { isConnected } = get();
         if (!isConnected) {
             console.warn("Attempted to select database without connection");
             return;

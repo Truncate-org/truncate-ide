@@ -106,27 +106,25 @@ export const ConnectionCard: React.FC = () => {
     };
 
     return (
-        <div className="p-4">
-            <div className="text-xs text-gray-500 uppercase tracking-wider font-semibold mb-2">No active connection</div>
-
-            <form onSubmit={handleSubmit} className="bg-[#252526] rounded border border-[#3e3e3e] p-3 space-y-3">
+        <div className="flex flex-col h-full">
+            <form onSubmit={handleSubmit} className="space-y-4 p-3">
 
                 {/* Connection Type */}
-                <div className="space-y-1">
-                    <label className="text-[10px] uppercase text-gray-500 font-semibold">Database Type</label>
+                <div className="space-y-1.5">
+                    <label className="text-[11px] text-gray-400 font-medium">Database Type</label>
                     <div className="relative">
                         <select
                             value={dbType}
                             onChange={(e) => handleTypeChange(e.target.value)}
-                            className="w-full bg-[#1e1e1e] border border-[#3e3e3e] rounded px-2 py-1.5 text-xs text-gray-300 focus:border-blue-500 focus:outline-none appearance-none cursor-pointer"
+                            className="w-full bg-[#1e1e1e] border border-[#3e3e3e] rounded px-3 py-2 text-sm text-gray-200 focus:border-blue-500 focus:outline-none appearance-none cursor-pointer transition-colors"
                         >
                             <option value="mysql">MySQL</option>
                             <option value="postgres">PostgreSQL</option>
                             <option value="sqlite">SQLite</option>
                             <option value="csv">CSV File</option>
                         </select>
-                        <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none text-gray-500">
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <div className="absolute inset-y-0 right-0 flex items-center px-3 pointer-events-none text-gray-500">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
                             </svg>
                         </div>
@@ -134,22 +132,23 @@ export const ConnectionCard: React.FC = () => {
                 </div>
 
                 {dbType === 'sqlite' || dbType === 'csv' ? (
-                    <div className="space-y-1">
-                        <label className="text-[10px] uppercase text-gray-500 font-semibold">
+                    <div className="space-y-1.5">
+                        <label className="text-[11px] text-gray-400 font-medium">
                             {dbType === 'csv' ? 'CSV File' : 'Database File'}
                         </label>
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 items-center">
                             <input
                                 type="text"
                                 readOnly
                                 value={form.filePath}
-                                className="flex-1 bg-[#1e1e1e] border border-[#3e3e3e] rounded px-2 py-1 text-xs text-gray-300 focus:outline-none cursor-not-allowed opacity-70"
+                                className="flex-1 min-w-0 bg-[#1e1e1e] border border-[#3e3e3e] rounded px-3 py-2 text-sm text-gray-300 focus:outline-none truncate"
                                 placeholder={dbType === 'csv' ? "Select .csv or .tsv file" : "Select a .db or .sqlite file"}
                             />
                             <button
                                 type="button"
                                 onClick={handleFilePick}
-                                className="bg-[#3e3e3e] hover:bg-[#4e4e4e] text-white px-3 rounded flex items-center justify-center transition-colors"
+                                className="w-10 h-10 shrink-0 bg-[#3e3e3e] hover:bg-[#4e4e4e] text-white rounded flex items-center justify-center transition-colors"
+                                title="Browse for file"
                             >
                                 <FolderOpen className="w-4 h-4" />
                             </button>
@@ -158,49 +157,49 @@ export const ConnectionCard: React.FC = () => {
                 ) : (
                     <>
                         {/* Host */}
-                        <div className="space-y-1">
-                            <label className="text-[10px] uppercase text-gray-500 font-semibold">Host</label>
+                        <div className="space-y-1.5">
+                            <label className="text-[11px] text-gray-400 font-medium">Host</label>
                             <input
                                 type="text"
                                 value={form.host}
                                 onChange={e => handleChange('host', e.target.value)}
-                                className="w-full bg-[#1e1e1e] border border-[#3e3e3e] rounded px-2 py-1 text-xs text-gray-300 focus:border-blue-500 focus:outline-none transition-colors"
+                                className="w-full bg-[#1e1e1e] border border-[#3e3e3e] rounded px-3 py-2 text-sm text-gray-200 focus:border-blue-500 focus:outline-none transition-colors"
                                 placeholder="localhost"
                             />
                         </div>
 
                         {/* Port */}
-                        <div className="space-y-1">
-                            <label className="text-[10px] uppercase text-gray-500 font-semibold">Port</label>
+                        <div className="space-y-1.5">
+                            <label className="text-[11px] text-gray-400 font-medium">Port</label>
                             <input
                                 type="number"
                                 value={form.port}
                                 onChange={e => handleChange('port', parseInt(e.target.value) || 0)}
-                                className="w-full bg-[#1e1e1e] border border-[#3e3e3e] rounded px-2 py-1 text-xs text-gray-300 focus:border-blue-500 focus:outline-none transition-colors"
+                                className="w-full bg-[#1e1e1e] border border-[#3e3e3e] rounded px-3 py-2 text-sm text-gray-200 focus:border-blue-500 focus:outline-none transition-colors"
                                 placeholder={dbType === 'mysql' ? "3306" : "5432"}
                             />
                         </div>
 
                         {/* User */}
-                        <div className="space-y-1">
-                            <label className="text-[10px] uppercase text-gray-500 font-semibold">User</label>
+                        <div className="space-y-1.5">
+                            <label className="text-[11px] text-gray-400 font-medium">Username</label>
                             <input
                                 type="text"
                                 value={form.user}
                                 onChange={e => handleChange('user', e.target.value)}
-                                className="w-full bg-[#1e1e1e] border border-[#3e3e3e] rounded px-2 py-1 text-xs text-gray-300 focus:border-blue-500 focus:outline-none transition-colors"
+                                className="w-full bg-[#1e1e1e] border border-[#3e3e3e] rounded px-3 py-2 text-sm text-gray-200 focus:border-blue-500 focus:outline-none transition-colors"
                                 placeholder={dbType === 'mysql' ? "root" : "postgres"}
                             />
                         </div>
 
-                        {/* Password is masked */}
-                        <div className="space-y-1">
-                            <label className="text-[10px] uppercase text-gray-500 font-semibold">Password</label>
+                        {/* Password */}
+                        <div className="space-y-1.5">
+                            <label className="text-[11px] text-gray-400 font-medium">Password</label>
                             <input
                                 type="password"
                                 value={form.password}
                                 onChange={e => handleChange('password', e.target.value)}
-                                className="w-full bg-[#1e1e1e] border border-[#3e3e3e] rounded px-2 py-1 text-xs text-gray-300 focus:border-blue-500 focus:outline-none transition-colors"
+                                className="w-full bg-[#1e1e1e] border border-[#3e3e3e] rounded px-3 py-2 text-sm text-gray-200 focus:border-blue-500 focus:outline-none transition-colors"
                                 placeholder="••••••••"
                             />
                         </div>
@@ -208,24 +207,24 @@ export const ConnectionCard: React.FC = () => {
                 )}
 
                 {connectionError && (
-                    <div className="bg-red-900/20 border border-red-800/50 text-red-200 p-2 rounded text-xs flex items-start gap-1.5 break-all">
-                        <AlertCircle className="w-3 h-3 mt-0.5 shrink-0" />
-                        <span>{connectionError}</span>
+                    <div className="bg-red-900/20 border border-red-800/50 text-red-200 p-3 rounded text-xs flex items-start gap-2">
+                        <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+                        <span className="break-all">{connectionError}</span>
                     </div>
                 )}
 
                 <button
                     type="submit"
                     disabled={isConnecting || ((dbType === 'sqlite' || dbType === 'csv') && !form.filePath)}
-                    className="w-full bg-blue-600 hover:bg-blue-500 text-white font-medium py-1.5 rounded text-xs flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full bg-blue-600 hover:bg-blue-500 text-white font-medium py-2.5 rounded text-sm flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     {isConnecting ? (
                         <>
-                            <Loader2 className="w-3 h-3 animate-spin" />
+                            <Loader2 className="w-4 h-4 animate-spin" />
                             Connecting...
                         </>
                     ) : (
-                        dbType === 'csv' ? '[ Preview & Connect ]' : '[ Connect ]'
+                        dbType === 'csv' ? 'Preview & Connect' : 'Connect'
                     )}
                 </button>
             </form>

@@ -5,6 +5,7 @@ pub struct TablePreview {
     pub columns: Vec<String>,
     pub rows: Vec<Vec<String>>,
     pub limited: bool,
+    pub formatted_output: Option<String>,
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -12,6 +13,7 @@ pub struct TablePreview {
 pub enum QueryResult {
     ResultSet(TablePreview),
     Success(String),
+    Error(String),
 }
 
 #[derive(Serialize, Clone, Debug)]

@@ -100,7 +100,14 @@ async fn sql_run_query(
     let guard = state.adapter.lock().await;
     let adapter = guard.as_ref().ok_or("No active connection")?;
     
-    let result = adapter.execute_query(&sql).await?;
+    // Execute
+    let mut result = adapter.execute_query(&sql).await?;
+    
+    // Inject Formatted Text for Terminal
+    if let QueryResult::ResultSet(ref mut preview) = result {
+        let formatted = crate::sql_utils::format_table(&preview.columns, &preview.rows);
+        preview.formatted_output = Some(formatted);
+    }
     
     // Check for schema changes
     if let Some(stmt) = crate::sql_utils::get_last_statement(&sql) {
@@ -114,6 +121,9 @@ async fn sql_run_query(
             _ => {}
         }
     }
+
+    // Emit result for UI Sync (Preview Panel)
+    let _ = window.emit("query-executed", &result);
 
     Ok(result)
 }

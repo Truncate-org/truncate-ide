@@ -9,9 +9,16 @@ const DataResultsView: React.FC = () => {
     // 1. Idle State
     if (previewState === 'idle') {
         return (
-            <div className="flex flex-col h-full items-center justify-center text-secondary select-none">
-                <TableIcon className="w-8 h-8 mb-3 opacity-10" />
-                <p className="text-xs text-gray-500">Select a table or run a query</p>
+            <div className="flex flex-col h-full items-center justify-center text-secondary select-none bg-[#1f1f1f]">
+                <div className="flex flex-col items-center max-w-sm text-center">
+                    <div className="w-16 h-16 bg-[#2d2d2d] rounded-full flex items-center justify-center mb-4 text-gray-600">
+                        <TableIcon className="w-8 h-8 opacity-50" />
+                    </div>
+                    <h3 className="text-gray-300 font-medium mb-1">No Data Selected</h3>
+                    <p className="text-xs text-gray-500 leading-relaxed max-w-[200px]">
+                        Select a table from the <span className="text-blue-400">Explorer</span> to view its contents, or run a query below.
+                    </p>
+                </div>
             </div>
         );
     }

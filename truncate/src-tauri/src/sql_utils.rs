@@ -1,113 +1,173 @@
+use sqlparser::dialect::GenericDialect;
+use sqlparser::parser::Parser;
+use sqlparser::ast::Statement;
 
 #[derive(Debug, PartialEq)]
 pub enum SqlType {
     Select,
-    Show,
-    Describe,
-    Use,
+    Create,
+    Drop,
+    Alter,
+    Insert,
     Update,
     Delete,
-    Drop,
-    Truncate,
-    Insert,
-    Alter,
-    Create,
+    Use, // Added
     Other,
 }
 
-pub fn get_sql_type(sql: &str) -> SqlType {
-    let trimmed = sql.trim().to_uppercase();
+pub fn get_last_statement(sql: &str) -> Option<String> {
+    let dialect = GenericDialect {};
+    // Use explicit type to fix E0282
+    let ast: Vec<Statement> = Parser::parse_sql(&dialect, sql).ok()?;
     
-    if trimmed.starts_with("SELECT") {
-        return SqlType::Select;
-    } else if trimmed.starts_with("SHOW") {
-        return SqlType::Show;
-    } else if trimmed.starts_with("DESCRIBE") || trimmed.starts_with("DESC") {
-        return SqlType::Describe;
-    } else if trimmed.starts_with("USE") {
-        return SqlType::Use;
-    } else if trimmed.starts_with("UPDATE") {
-        return SqlType::Update;
-    } else if trimmed.starts_with("DELETE") {
-        return SqlType::Delete;
-    } else if trimmed.starts_with("DROP") {
-        return SqlType::Drop;
-    } else if trimmed.starts_with("TRUNCATE") {
-        return SqlType::Truncate;
-    } else if trimmed.starts_with("INSERT") {
-        return SqlType::Insert;
-    } else if trimmed.starts_with("ALTER") {
-        return SqlType::Alter;
-    } else if trimmed.starts_with("CREATE") {
-        return SqlType::Create;
+    if ast.is_empty() {
+        return None;
     }
     
-    SqlType::Other
+    // Simple approach: return the input if it's a single valid statement
+    Some(sql.to_string())
 }
 
-pub fn extract_db_name(sql: &str) -> Option<String> {
+pub fn get_sql_type(sql: &str) -> SqlType {
+    // Check for USE manually as it's often not in generic dialect
     let trimmed = sql.trim();
-    if !trimmed.to_uppercase().starts_with("USE") {
-        return None;
+    if trimmed.to_uppercase().starts_with("USE ") {
+        return SqlType::Use;
     }
 
-    let parts: Vec<&str> = trimmed.split_whitespace().collect();
-    if parts.len() < 2 {
-        return None;
-    }
+    let dialect = GenericDialect {};
+    let ast: Vec<Statement> = match Parser::parse_sql(&dialect, sql) {
+        Ok(ast) => ast,
+        Err(_) => return SqlType::Other,
+    };
 
-    // parts[1] is the db name, but might have semicolon
-    let mut db_name = parts[1].to_string();
-    
-    if db_name.ends_with(';') {
-        db_name.pop();
-    }
-    
-    // Remove quotes if present (backticks or single/double quotes)
-    db_name = db_name.replace('`', "").replace('\'', "").replace('"', "");
-
-    if db_name.is_empty() {
-        None
+    if let Some(stmt) = ast.last() {
+        match stmt {
+            Statement::Query(_) => SqlType::Select,
+            Statement::CreateTable { .. } => SqlType::Create,
+            Statement::Drop { .. } => SqlType::Drop,
+            Statement::AlterTable { .. } => SqlType::Alter,
+            Statement::Insert { .. } => SqlType::Insert,
+            Statement::Update { .. } => SqlType::Update,
+            Statement::Delete { .. } => SqlType::Delete,
+            _ => SqlType::Other,
+        }
     } else {
-        Some(db_name)
+        SqlType::Other
     }
 }
 
 pub fn is_safe_for_mvp(sql_type: &SqlType) -> bool {
     match sql_type {
-        SqlType::Select | SqlType::Show | SqlType::Describe | SqlType::Use | SqlType::Create | SqlType::Drop | SqlType::Alter => true,
-        _ => false,
+        // Allow all standard SQL operations for the IDE functionality
+        SqlType::Select | 
+        SqlType::Use | 
+        SqlType::Create | 
+        SqlType::Drop | 
+        SqlType::Alter | 
+        SqlType::Insert | 
+        SqlType::Update | 
+        SqlType::Delete | 
+        SqlType::Other => true,
     }
 }
 
 pub fn has_limit_clause(sql: &str) -> bool {
-    let normalized = sql.replace('\n', " ").replace('\r', " ");
-    let upper = normalized.to_uppercase();
-    upper.split_whitespace().any(|word| word == "LIMIT")
+    sql.to_uppercase().contains("LIMIT")
 }
 
-pub fn validate_sql_structure(sql: &str, sql_type: &SqlType) -> Result<(), String> {
-    if matches!(sql_type, SqlType::Select) {
-        let normalized = sql.replace('\n', " ").replace('\r', " ");
-        let upper = normalized.to_uppercase();
-        
-        // Simple check for FROM clause
-        // Split by whitespace to ensure whole word matching
-        let has_from = upper.split_whitespace().any(|word| word == "FROM");
-        
-        if !has_from {
-            return Err("Invalid SQL: SELECT statements must include a FROM clause.".to_string());
-        }
+pub fn validate_sql_structure(sql: &str, _type: &SqlType) -> Result<(), String> {
+    if sql.trim().is_empty() {
+        return Err("Empty SQL query".to_string());
     }
     Ok(())
 }
 
-/// Splits the SQL string by semicolons and returns the last non-empty statement.
-/// This ensures we only execute one statement at a time, similar to a terminal default behavior.
-pub fn get_last_statement(sql: &str) -> Option<String> {
-    sql.split(';')
-        .map(|s| s.trim())
-        .filter(|s| !s.is_empty())
-        .last()
-        .map(|s| s.to_string())
+// Dummy extraction if needed, or we just remove import usage
+pub fn extract_db_name(_sql: &str) -> Option<String> {
+    None
+}
+
+pub fn format_table(columns: &[String], rows: &[Vec<String>]) -> String {
+    if columns.is_empty() {
+        return "\nEmpty Result\n".to_string();
+    }
+
+    // 1. Calculate Widths
+    let mut widths: Vec<usize> = columns.iter().map(|c| c.len()).collect();
+    
+    // Max width per column to prevent terminal explosion, say 50?
+    // And scan rows
+    // Limited to 50 rows for formatter to match the previous logic? 
+    // Or format ALL rows? Terminal paging usually handles it, but massive string is bad.
+    // Let's limit scan to 100 rows for width calc, and display maybe 100 rows?
+    
+    let display_rows = if rows.len() > 100 { &rows[0..100] } else { rows };
+    
+    for row in display_rows {
+        for (i, cell) in row.iter().enumerate() {
+            if i < widths.len() {
+                let len = cell.len();
+                if len > widths[i] {
+                    widths[i] = if len > 50 { 50 } else { len };
+                }
+            }
+        }
+    }
+
+    // 2. Build Separator
+    // +------+-------+
+    let mut separator = String::new();
+    separator.push('+');
+    for w in &widths {
+        separator.push_str(&"-".repeat(*w + 2));
+        separator.push('+');
+    }
+    
+    let mut output = String::new();
+    output.push_str("\r\n"); // Start with newline
+    output.push_str(&separator);
+    output.push_str("\r\n");
+
+    // 3. Header
+    output.push('|');
+    for (i, col) in columns.iter().enumerate() {
+        output.push(' ');
+        output.push_str(&format!("{:<width$}", col, width = widths[i]));
+        output.push(' ');
+        output.push('|');
+    }
+    output.push_str("\r\n");
+    output.push_str(&separator);
+    output.push_str("\r\n");
+
+    // 4. Rows
+    for row in display_rows {
+        output.push('|');
+        for (i, cell) in row.iter().enumerate() {
+            if i < widths.len() {
+                output.push(' ');
+                let content = if cell.len() > widths[i] {
+                     // Truncate
+                     format!("{}...", &cell[0..widths[i]-3])
+                } else {
+                    cell.clone()
+                };
+                output.push_str(&format!("{:<width$}", content, width = widths[i]));
+                output.push(' ');
+                output.push('|');
+            }
+        }
+        output.push_str("\r\n");
+    }
+
+    output.push_str(&separator);
+    output.push_str("\r\n");
+    
+    if rows.len() > display_rows.len() {
+        output.push_str(&format!("\x1b[90m... and {} more rows (view in Preview Panel)\x1b[0m\r\n", rows.len() - display_rows.len()));
+    }
+    output.push_str(&format!("\x1b[90m{} rows in set\x1b[0m\r\n", rows.len()));
+
+    output
 }

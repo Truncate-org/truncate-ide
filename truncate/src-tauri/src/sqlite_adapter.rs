@@ -253,7 +253,7 @@ impl DatabaseAdapter for SqliteAdapter {
 // Helper to map rows to TablePreview
 fn map_rows_to_preview(rows: Vec<SqliteRow>, limited: bool) -> Result<TablePreview, String> {
     if rows.is_empty() {
-        return Ok(TablePreview { columns: vec![], rows: vec![], limited: false });
+        return Ok(TablePreview { columns: vec![], rows: vec![], limited: false, formatted_output: None });
     }
 
     let columns: Vec<String> = rows[0]
@@ -296,5 +296,6 @@ fn map_rows_to_preview(rows: Vec<SqliteRow>, limited: bool) -> Result<TablePrevi
         columns,
         rows: refined_data_rows,
         limited,
+        formatted_output: None,
     })
 }

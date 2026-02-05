@@ -333,7 +333,7 @@ impl DatabaseAdapter for MySqlAdapter {
 // Helper to map rows to TablePreview (copied from lib.rs and adapted)
 fn map_rows_to_preview(rows: Vec<MySqlRow>, limited: bool) -> Result<TablePreview, String> {
     if rows.is_empty() {
-        return Ok(TablePreview { columns: vec![], rows: vec![], limited: false });
+        return Ok(TablePreview { columns: vec![], rows: vec![], limited: false, formatted_output: None });
     }
 
     let columns: Vec<String> = rows[0]
@@ -379,5 +379,6 @@ fn map_rows_to_preview(rows: Vec<MySqlRow>, limited: bool) -> Result<TablePrevie
         columns,
         rows: refined_data_rows,
         limited,
+        formatted_output: None,
     })
 }
