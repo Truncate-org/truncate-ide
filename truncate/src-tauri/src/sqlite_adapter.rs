@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions, SqliteRow, SqlitePool};
-use sqlx::{Row, Column, TypeInfo, ValueRef};
+use sqlx::{Row, Column, ValueRef};
 use std::time::Duration;
 use std::str::FromStr;
 use std::path::Path;
@@ -8,7 +8,7 @@ use std::path::Path;
 use crate::adapter::{DatabaseAdapter, ConnectionConfig, ConnectionType};
 use crate::types::{QueryResult, TablePreview};
 use crate::schema::{Schema, Table, Column as SchemaColumn, ForeignKey};
-use crate::sql_utils::{get_sql_type, is_safe_for_mvp, has_limit_clause, validate_sql_structure, get_last_statement, SqlType};
+use crate::sql_utils::{get_sql_type, is_safe_for_mvp, has_limit_clause, get_last_statement, SqlType};
 
 pub struct SqliteAdapter {
     pub(crate) pool: Option<SqlitePool>,
@@ -170,7 +170,7 @@ impl DatabaseAdapter for SqliteAdapter {
         self.conn_config.clone()
     }
     
-    async fn extract_schema(&self, db_name: &str) -> Result<Schema, String> {
+    async fn extract_schema(&self, _db_name: &str) -> Result<Schema, String> {
          let pool = self.pool.as_ref().ok_or("No database connection active")?;
          
          // 1. Get Tables

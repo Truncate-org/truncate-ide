@@ -6,7 +6,7 @@ use std::time::Duration;
 use crate::adapter::{DatabaseAdapter, ConnectionConfig, ConnectionType};
 use crate::types::{QueryResult, TablePreview};
 use crate::schema::{Schema, Table, Column as SchemaColumn, ForeignKey};
-use crate::sql_utils::{get_sql_type, extract_db_name, is_safe_for_mvp, has_limit_clause, validate_sql_structure, get_last_statement, SqlType};
+use crate::sql_utils::{get_sql_type, is_safe_for_mvp, has_limit_clause, validate_sql_structure, get_last_statement, SqlType};
 
 pub struct MySqlAdapter {
     pool: Option<MySqlPool>,

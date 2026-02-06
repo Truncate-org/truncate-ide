@@ -4,11 +4,11 @@ use crate::types::{QueryResult, TablePreview, CsvInspection};
 use crate::schema::Schema;
 use crate::sqlite_adapter::SqliteAdapter;
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::fs::File;
 use std::io::BufReader;
 use tempfile::NamedTempFile;
-use sqlx::{Pool, Sqlite, Row};
+// use sqlx::{Pool, Sqlite, Row};
 use tokio::sync::mpsc;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -247,9 +247,9 @@ impl DatabaseAdapter for CsvAdapter {
                 // or build a large VALUES (), (), () string.
                 // Large VALUES string is faster.
                 
-                let mut query_builder = format!("INSERT INTO {} VALUES ", table_name);
-                let mut params_count = 0;
-                let batch_size = valid_batch.len();
+                // let mut query_builder = format!("INSERT INTO {} VALUES ", table_name);
+                // let mut params_count = 0;
+                // let batch_size = valid_batch.len();
                 
                 // Construct query: (?, ?, ?), (?, ?, ?) ...
                 // Actually, string construction is unsafe if we don't bind parameters.

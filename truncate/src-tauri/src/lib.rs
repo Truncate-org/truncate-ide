@@ -12,6 +12,8 @@ pub mod db_state;
 pub mod sql_utils;
 pub mod schema;
 pub mod terminal;
+pub mod ai_copilot;
+
 
 use crate::db_state::DbState;
 use crate::adapter::{DatabaseAdapter, DbAdapter};
@@ -150,7 +152,7 @@ async fn export_database_schema(
     app_handle: tauri::AppHandle,
 ) -> Result<crate::schema::ExportResult, String> {
     // 1. Extract Schema
-    let (schema, db_name) = {
+    let (schema, _db_name) = {
         let guard = state.adapter.lock().await;
         let adapter = guard.as_ref().ok_or("No active connection")?;
         let db = adapter.get_current_database().await?;
@@ -187,8 +189,12 @@ pub fn run() {
             start_terminal_auto,
             stop_terminal,
             refresh_databases,
-            inspect_csv
+            refresh_databases,
+            inspect_csv,
+            ai_copilot::ask_copilot,
+            ai_copilot::check_ai_status
         ])
+
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
