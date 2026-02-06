@@ -2,7 +2,7 @@
 
 **Truncate IDE** is a modern, high-performance SQL client built for speed, safety, and developer experience. Designed as a lightweight alternative to heavy database tools, it leverages the power of **Tauri (Rust)** for a native backend and **React** for a responsive frontend.
 
-![Truncate IDE](https://via.placeholder.com/800x450?text=Truncate+IDE+Preview)
+
 
 ## ✨ Key Features
 
