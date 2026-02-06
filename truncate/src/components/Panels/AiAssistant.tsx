@@ -4,8 +4,8 @@ import { useAiStore } from '../../store/aiStore.ts';
 import { useDatabaseStore } from '../../store/databaseStore.ts';
 
 const AiAssistant: React.FC = () => {
-    const { messages, status, checkStatus, isThinking, modelStatus } = useAiStore();
-    const { runQuery } = useDatabaseStore();
+    const { messages, status, checkStatus, isThinking, modelStatus, cancelRequest } = useAiStore();
+    const { runQuery, activeDatabase } = useDatabaseStore();
     const scrollRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -76,74 +76,136 @@ const AiAssistant: React.FC = () => {
                         </div>
                     )}
 
-                    {messages.map((msg) => (
-                        <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                            {msg.role === 'user' ? (
-                                <div className="bg-accent/10 text-primary px-4 py-2.5 rounded-2xl rounded-tr-sm max-w-[85%] text-sm leading-relaxed border border-accent/20 shadow-sm">
-                                    {msg.content}
-                                </div>
-                            ) : (
-                                <div className="space-y-2 max-w-[95%] w-full">
-                                    {msg.type !== 'error' && (
-                                        <div className="flex items-center space-x-2 mb-1 pl-1">
-                                            <div className="w-5 h-5 rounded bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-[9px] font-bold shadow-sm">AI</div>
-                                            <span className="text-xs text-secondary font-medium">Truncate AI</span>
-                                        </div>
-                                    )}
+                    {messages.map((msg) => {
+                        let summary = '';
+                        let sql = '';
+                        let isError = msg.type === 'error';
+                        let parseSuccess = false;
 
-                                    {msg.content && <div className="text-secondary text-sm leading-relaxed whitespace-pre-wrap pl-1">{msg.explanation || msg.content}</div>}
+                        // 1. Safe Parse with Markdown Stripping
+                        if (msg.role === 'assistant' && msg.content) {
+                            try {
+                                // Remove markdown fences if present
+                                const cleanParam = msg.content
+                                    .replace(/```json\s*/g, '')
+                                    .replace(/```\s*/g, '')
+                                    .trim();
 
-                                    {msg.sql && (
-                                        <div className={`mt-2 rounded-lg border overflow-hidden ${msg.isSafe === false ? 'border-red-500/50 bg-red-500/5' : 'border-subtle bg-app'}`}>
-                                            {msg.isSafe === false && (
-                                                <div className="bg-red-500/10 text-red-400 text-xs px-3 py-1.5 flex items-center border-b border-red-500/20">
-                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5 mr-1.5">
-                                                        <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+                                const parsed = JSON.parse(cleanParam);
+                                summary = parsed.summary || '';
+                                sql = parsed.sql || '';
+                                parseSuccess = true;
+                            } catch (e) {
+                                // Parsing failed
+                                parseSuccess = false;
+                            }
+                        } else if (msg.type === 'text') {
+                            // User message or legacy text
+                            summary = msg.content;
+                            parseSuccess = true;
+                        }
+
+                        const renderKey = msg.id;
+
+                        return (
+                            <div key={renderKey} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                {msg.role === 'user' ? (
+                                    <div className="bg-accent/10 text-primary px-4 py-2.5 rounded-2xl rounded-tr-sm max-w-[85%] text-sm leading-relaxed border border-accent/20 shadow-sm">
+                                        {msg.content}
+                                    </div>
+                                ) : (
+                                    <div className="space-y-2 max-w-[95%] w-full">
+                                        {/* AI Header */}
+                                        {msg.type !== 'error' && (
+                                            <div className="flex items-center space-x-2 mb-1 pl-1">
+                                                <div className="w-5 h-5 rounded bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-[9px] font-bold shadow-sm">AI</div>
+                                                <span className="text-xs text-secondary font-medium">Truncate AI</span>
+                                            </div>
+                                        )}
+
+                                        {/* Content Card */}
+                                        {parseSuccess ? (
+                                            <div className="space-y-3">
+                                                {/* Summary */}
+                                                {summary && (
+                                                    <div className="text-primary text-sm leading-relaxed pl-1 whitespace-pre-wrap">
+                                                        {summary}
+                                                    </div>
+                                                )}
+
+                                                {/* SQL Editor Block */}
+                                                {sql && (
+                                                    <div className="rounded-lg border border-subtle bg-app overflow-hidden shadow-sm mt-3">
+                                                        <div className="flex items-center justify-between px-3 py-1.5 bg-subtle/30 border-b border-subtle/50">
+                                                            <span className="text-[10px] text-secondary font-mono uppercase tracking-wider">SQL</span>
+                                                            <div className="flex space-x-1">
+                                                                <button
+                                                                    onClick={() => handleCopy(sql)}
+                                                                    className="p-1 hover:bg-subtle/50 rounded text-secondary hover:text-primary transition-colors flex items-center space-x-1"
+                                                                    title="Copy SQL"
+                                                                >
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3">
+                                                                        <path d="M7 3.5A1.5 1.5 0 018.5 2h3.879a1.5 1.5 0 011.06.44l3.122 3.12A1.5 1.5 0 0117 6.622V12.5a1.5 1.5 0 01-1.5 1.5h-1v-3.379a3 3 0 00-.879-2.121L10.5 5.379A3 3 0 008.379 4.5H7v-1z" />
+                                                                        <path d="M4.5 6A1.5 1.5 0 003 7.5v9A1.5 1.5 0 004.5 18h7a1.5 1.5 0 001.5-1.5v-5.879a1.5 1.5 0 00-.44-1.06L9.44 6.439A1.5 1.5 0 008.378 6H4.5z" />
+                                                                    </svg>
+                                                                    <span className="text-[10px]">Copy</span>
+                                                                </button>
+                                                                <div className="w-px h-3 bg-subtle/50 my-auto"></div>
+                                                                <button
+                                                                    onClick={() => handleRunQuery(sql)}
+                                                                    className="flex items-center space-x-1 px-2 py-0.5 bg-accent/10 hover:bg-accent/20 text-accent rounded text-[10px] font-medium transition-colors"
+                                                                    title="Run in Terminal"
+                                                                >
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3">
+                                                                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
+                                                                    </svg>
+                                                                    <span>Run Query</span>
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                        <div className="p-3 overflow-x-auto bg-[#1e1e1e]">
+                                                            <pre className="font-mono text-xs text-[#d4d4d4] leading-relaxed whitespace-pre-wrap">{sql}</pre>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ) : (
+                                            /* Failure State - Hide Raw JSON */
+                                            <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-3">
+                                                <div className="flex items-center text-red-400 text-xs font-medium mb-1">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 mr-1.5">
+                                                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                                                     </svg>
-                                                    Destructive Query Detected
+                                                    AI Response Error
                                                 </div>
-                                            )}
-                                            <div className="flex items-center justify-between px-3 py-1.5 bg-subtle/30 border-b border-subtle/50">
-                                                <span className="text-[10px] text-secondary font-mono uppercase tracking-wider">SQL</span>
-                                                <div className="flex space-x-1">
-                                                    <button
-                                                        onClick={() => handleCopy(msg.sql!)}
-                                                        className="p-1 hover:bg-subtle/50 rounded text-secondary hover:text-primary transition-colors"
-                                                        title="Copy SQL"
-                                                    >
-                                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
-                                                            <path d="M7 3.5A1.5 1.5 0 018.5 2h3.879a1.5 1.5 0 011.06.44l3.122 3.12A1.5 1.5 0 0117 6.622V12.5a1.5 1.5 0 01-1.5 1.5h-1v-3.379a3 3 0 00-.879-2.121L10.5 5.379A3 3 0 008.379 4.5H7v-1z" />
-                                                            <path d="M4.5 6A1.5 1.5 0 003 7.5v9A1.5 1.5 0 004.5 18h7a1.5 1.5 0 001.5-1.5v-5.879a1.5 1.5 0 00-.44-1.06L9.44 6.439A1.5 1.5 0 008.378 6H4.5z" />
-                                                        </svg>
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleRunQuery(msg.sql!)}
-                                                        className="flex items-center space-x-1 px-2 py-0.5 bg-accent text-white rounded text-[10px] font-medium hover:bg-accent/90 transition-colors shadow-sm"
-                                                    >
-                                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3">
-                                                            <path fillRule="evenodd" d="M2 10a8 8 0 1116 0 8 8 0 01-16 0zm6.39-2.908a.75.75 0 01.766.027l3.5 2.25a.75.75 0 010 1.262l-3.5 2.25A.75.75 0 018 12.25v-4.5a.75.75 0 01.39-.658z" clipRule="evenodd" />
-                                                        </svg>
-                                                        <span>Run</span>
-                                                    </button>
+                                                <div className="text-secondary text-xs">
+                                                    The AI returned an invalid response format. Please try rephrasing your question.
                                                 </div>
                                             </div>
-                                            <div className="p-3 overflow-x-auto bg-app">
-                                                <pre className="font-mono text-xs text-primary leading-relaxed">{msg.sql}</pre>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-                    ))}
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
 
                     {isThinking && (
-                        <div className="flex justify-start opacity-80 pl-1">
-                            <div className="space-y-2 max-w-[90%]">
+                        <div className="flex justify-start pl-1 w-full mb-2">
+                            <div className="flex items-center space-x-3 bg-subtle/10 px-3 py-2 rounded-lg border border-subtle/20">
                                 <div className="flex items-center space-x-2">
-                                    <div className="w-4 h-4 rounded-full border-2 border-accent border-t-transparent animate-spin"></div>
-                                    <span className="text-xs text-secondary animate-pulse font-medium">Analyzing database schema...</span>
+                                    <div className="w-3.5 h-3.5 rounded-full border-2 border-accent border-t-transparent animate-spin"></div>
+                                    <span className="text-xs text-secondary animate-pulse font-medium">Generating response...</span>
                                 </div>
+                                <div className="h-3 w-px bg-subtle/30"></div>
+                                <button
+                                    onClick={cancelRequest}
+                                    className="flex items-center space-x-1 text-[10px] uppercase font-bold text-red-400 hover:text-red-500 transition-colors"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3">
+                                        <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
+                                    </svg>
+                                    <span>Stop</span>
+                                </button>
                             </div>
                         </div>
                     )}

@@ -100,7 +100,7 @@ export default function TerminalPanel({ readOnly = true, setReadOnly = () => { }
         }
 
         // 2. Intercept SQL Commands
-        const SQL_VERBS = /^(SELECT|WITH|INSERT|UPDATE|DELETE|CREATE|DROP|ALTER|PRAGMA|DESCRIBE|SHOW|EXPLAIN)\b/i;
+        const SQL_VERBS = /^(SELECT|WITH|INSERT|UPDATE|DELETE|CREATE|DROP|ALTER|PRAGMA|DESCRIBE|DESC|SHOW|EXPLAIN)\b/i;
         const isSql = SQL_VERBS.test(currentLine);
 
         if (isSql && useDatabaseStore.getState().isConnected) {
@@ -176,7 +176,9 @@ export default function TerminalPanel({ readOnly = true, setReadOnly = () => { }
             pendingActionRef.current = null;
         }
 
-        await sendEnter();
+        // Fallback: Send the buffered command to PTY
+        await invoke('write_terminal', { id: 'term-1', data: currentLine + '\r' });
+        inputBufferRef.current = '';
     };
 
 

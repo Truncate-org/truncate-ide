@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
 
+
 export interface AiMessage {
     id: string;
     role: 'user' | 'assistant' | 'system';
@@ -25,10 +26,12 @@ interface AiStore {
     modelStatus: AiStatus | null;
     isThinking: boolean;
     error: string | null;
+    abortController: AbortController | null;
 
     // Actions
     checkStatus: () => Promise<void>;
     sendMessage: (text: string) => Promise<void>;
+    cancelRequest: () => void;
     clearHistory: () => void;
     addMessage: (msg: AiMessage) => void;
 }
@@ -39,6 +42,7 @@ export const useAiStore = create<AiStore>((set, get) => ({
     modelStatus: null,
     isThinking: false,
     error: null,
+    abortController: null,
 
     checkStatus: async () => {
         try {
@@ -78,40 +82,46 @@ export const useAiStore = create<AiStore>((set, get) => ({
             timestamp: Date.now()
         };
 
+        const controller = new AbortController();
+
+        // 1. Append User Message Only
         set(state => ({
             messages: [...state.messages, userMsg],
             isThinking: true,
-            error: null
+            error: null,
+            abortController: controller
         }));
 
         try {
-            type AiResponse = {
-                intent: string;
-                sql: string;
-                explanation: string;
-                confidence: string;
-                is_safe: boolean;
-            };
+            // 2. Await Blocking Response
+            // The backend now returns Result<String, String> which is the raw JSON string
+            const responseText = await invoke<string>('ask_copilot', { userPrompt: text });
 
-            const response = await invoke<AiResponse>('ask_copilot', { userPrompt: text });
+            // 3. Check Cancellation
+            if (controller.signal.aborted) {
+                return;
+            }
 
+            // 4. Create Assistant Message
             const aiMsg: AiMessage = {
                 id: crypto.randomUUID(),
                 role: 'assistant',
-                content: response.explanation || "Here is the generated SQL.",
-                type: response.intent === 'error' ? 'error' : 'sql_response',
-                sql: response.sql,
-                explanation: response.explanation, // Redundant but useful for UI
-                isSafe: response.is_safe,
-                timestamp: Date.now()
+                content: responseText,
+                type: 'text',
+                timestamp: Date.now(),
+                isSafe: true
             };
 
+            // 5. Append Assistant Message
             set(state => ({
                 messages: [...state.messages, aiMsg],
-                isThinking: false
+                isThinking: false,
+                abortController: null
             }));
 
         } catch (e: any) {
+            if (controller.signal.aborted) return;
+
             console.error("AI Error:", e);
             const errorMsg: AiMessage = {
                 id: crypto.randomUUID(),
@@ -122,9 +132,18 @@ export const useAiStore = create<AiStore>((set, get) => ({
             };
             set(state => ({
                 messages: [...state.messages, errorMsg],
-                isThinking: false
+                isThinking: false,
+                abortController: null
             }));
         }
+    },
+
+    cancelRequest: () => {
+        const { abortController } = get();
+        if (abortController) {
+            abortController.abort();
+        }
+        set({ isThinking: false, abortController: null });
     },
 
     clearHistory: () => set({ messages: [] }),
