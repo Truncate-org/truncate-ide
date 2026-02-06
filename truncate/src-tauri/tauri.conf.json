@@ -20,7 +20,8 @@
     "security": {
       "csp": null,
       "capabilities": [
-        "default"
+        "default",
+        "shell-ollama"
       ]
     }
   },
@@ -37,6 +38,9 @@
     ],
     "resources": [
       "bin/dot-aarch64-apple-darwin"
+    ],
+    "externalBin": [
+      "binaries/ollama"
     ]
   }
 }

@@ -9,7 +9,7 @@
 
 ## 2. Select Local Model
 **Choose model optimized for code/SQL:**
-- Qwen2.5-Coder / SQLCoder / Llama 3 Instruct
+- Qwen2.5-Coder
 - Decide quantization (4-bit / 8-bit) based on RAM
 - Lock temperature (0.1–0.2)
 

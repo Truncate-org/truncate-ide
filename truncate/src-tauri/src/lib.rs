@@ -175,6 +175,14 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(DbState::new())
         .manage(TerminalState::new())
+        .setup(|app| {
+            // Start Ollama Sidecar
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                ai_copilot::start_ollama(&handle);
+            });
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             connect_server,
             select_database,
