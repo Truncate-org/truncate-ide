@@ -5,7 +5,7 @@ import { useDatabaseStore } from '../../store/databaseStore.ts';
 
 const AiAssistant: React.FC = () => {
     const { messages, status, checkStatus, isThinking, modelStatus, cancelRequest } = useAiStore();
-    const { runQuery, activeDatabase } = useDatabaseStore();
+    const { runQuery } = useDatabaseStore();
     const scrollRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -79,22 +79,42 @@ const AiAssistant: React.FC = () => {
                     {messages.map((msg) => {
                         let summary = '';
                         let sql = '';
-                        let isError = msg.type === 'error';
                         let parseSuccess = false;
 
-                        // 1. Safe Parse with Markdown Stripping
+                        // 1. Strict JSON Parsing (New Format)
                         if (msg.role === 'assistant' && msg.content) {
                             try {
-                                // Remove markdown fences if present
-                                const cleanParam = msg.content
-                                    .replace(/```json\s*/g, '')
-                                    .replace(/```\s*/g, '')
-                                    .trim();
+                                // Attempt to find the first '{' and last '}' to extract valid JSON
+                                const jsonMatch = msg.content.match(/\{[\s\S]*\}/);
+                                if (jsonMatch) {
+                                    const cleanParam = jsonMatch[0];
+                                    const parsed = JSON.parse(cleanParam);
 
-                                const parsed = JSON.parse(cleanParam);
-                                summary = parsed.summary || '';
-                                sql = parsed.sql || '';
-                                parseSuccess = true;
+                                    if (parsed.type === 'error') {
+                                        summary = parsed.reason || parsed.summary || 'An error occurred';
+                                        parseSuccess = true;
+                                    } else {
+                                        summary = parsed.summary || '';
+                                        sql = parsed.sql || '';
+                                        parseSuccess = true;
+                                    }
+                                } else {
+                                    // Fallback: try parsing the whole string if regex fails (unlikely if it's JSON)
+                                    const cleanParam = msg.content
+                                        .replace(/```json\s*/g, '')
+                                        .replace(/```\s*/g, '')
+                                        .trim();
+                                    const parsed = JSON.parse(cleanParam);
+                                    // ... same logic as above repeated or just rely on regex
+                                    if (parsed.type === 'error') {
+                                        summary = parsed.reason || parsed.summary || 'An error occurred';
+                                        parseSuccess = true;
+                                    } else {
+                                        summary = parsed.summary || '';
+                                        sql = parsed.sql || '';
+                                        parseSuccess = true;
+                                    }
+                                }
                             } catch (e) {
                                 // Parsing failed
                                 parseSuccess = false;

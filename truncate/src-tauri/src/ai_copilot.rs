@@ -48,7 +48,8 @@ const SYSTEM_PROMPT: &str = include_str!("../context/AI_context.md");
 
 fn build_schema_context(schema: &Schema, db_type: &str) -> String {
     let mut context = String::new();
-    context.push_str(&format!("ACTIVE DATABASE: {}\n", db_type.to_uppercase()));
+    context.push_str("==== ACTIVE DATABASE SCHEMA ====\n");
+    context.push_str(&format!("DATABASE TYPE: {}\n", db_type.to_uppercase()));
     context.push_str(&format!("DATABASE NAME: {}\n\n", schema.database_name));
     context.push_str("TABLES:\n");
 
@@ -56,8 +57,9 @@ fn build_schema_context(schema: &Schema, db_type: &str) -> String {
         let cols: Vec<String> = table.columns.iter()
             .map(|c| format!("{} {}", c.name, c.data_type))
             .collect();
-        context.push_str(&format!("{}({})\n", table.name, cols.join(", ")));
+        context.push_str(&format!("- {}({})\n", table.name, cols.join(", ")));
     }
+    context.push_str("================================\n");
     
     context
 }
@@ -74,7 +76,7 @@ struct OllamaTags { models: Vec<OllamaModel> }
 async fn resolve_model_name() -> Result<String, String> {
     let client = reqwest::Client::new();
     // Short implementation of dynamic model logic
-    let res = client.get("http://localhost:11434/api/tags").send().await
+    let res = client.get("http://127.0.0.1:11434/api/tags").send().await
         .map_err(|e| e.to_string())?;
     
     if !res.status().is_success() { return Err("Ollama offline".to_string()); }
@@ -174,7 +176,7 @@ async fn query_ollama(
     model: String
 ) -> Result<String, String> {
     let client = reqwest::Client::new();
-    let url = "http://localhost:11434/api/chat";
+    let url = "http://127.0.0.1:11434/api/chat";
 
     let mut options = HashMap::new();
     options.insert("temperature".to_string(), serde_json::json!(0.1));

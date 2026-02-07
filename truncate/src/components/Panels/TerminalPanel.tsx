@@ -56,6 +56,8 @@ export default function TerminalPanel({ readOnly = true, setReadOnly = () => { }
     // Logic Refs
     const pendingActionRef = useRef<{ type: 'DB_REFRESH' | 'TABLE_REFRESH' | 'DB_SWITCH', payload?: string } | null>(null);
     const lastSyncedDbRef = useRef<string | null>(null);
+    // Cursor position tracking (0-based index within inputBufferRef)
+    const inputCursorRef = useRef(0);
 
     // Regex Constants
     const DB_REFRESH_REGEX = /^(CREATE|DROP|ALTER)\s+DATABASE/i;
@@ -66,6 +68,7 @@ export default function TerminalPanel({ readOnly = true, setReadOnly = () => { }
     const sendEnter = async () => {
         await invoke('write_terminal', { id: 'term-1', data: '\r' });
         inputBufferRef.current = '';
+        inputCursorRef.current = 0;
     };
 
     // Helper: Confirm Dangerous Action
@@ -78,7 +81,7 @@ export default function TerminalPanel({ readOnly = true, setReadOnly = () => { }
     const handleEnter = async (term: Terminal) => {
         let currentLine = inputBufferRef.current.trim();
 
-        // Fallback: Screen scraping if buffer empty (shouldn't happen with correct logic but good for safety)
+        // Fallback: Screen scraping if buffer empty
         if (!currentLine) {
             try {
                 const buffer = term.buffer.active;
@@ -91,13 +94,15 @@ export default function TerminalPanel({ readOnly = true, setReadOnly = () => { }
 
         // 1. Update History
         if (currentLine) {
-            // Avoid duplicates at top? Standard terminal doesn't always, but good UX.
-            // Let's just push for now.
             if (historyRef.current[0] !== currentLine) {
                 historyRef.current = [currentLine, ...historyRef.current];
             }
             historyIndexRef.current = -1;
         }
+
+        // Reset Cursor/Buffer immediately
+        inputBufferRef.current = '';
+        inputCursorRef.current = 0;
 
         // 2. Intercept SQL Commands
         const SQL_VERBS = /^(SELECT|WITH|INSERT|UPDATE|DELETE|CREATE|DROP|ALTER|PRAGMA|DESCRIBE|DESC|SHOW|EXPLAIN)\b/i;
@@ -105,7 +110,6 @@ export default function TerminalPanel({ readOnly = true, setReadOnly = () => { }
 
         if (isSql && useDatabaseStore.getState().isConnected) {
             term.write('\r\n');
-            inputBufferRef.current = '';
 
             try {
                 // Execute Backend Query
@@ -123,7 +127,6 @@ export default function TerminalPanel({ readOnly = true, setReadOnly = () => { }
                 }
 
                 // Restore Prompt
-                // Simple \r forces PTY to reprint prompt.
                 await invoke('write_terminal', { id: 'term-1', data: '\r' });
 
             } catch (e) {
@@ -133,30 +136,20 @@ export default function TerminalPanel({ readOnly = true, setReadOnly = () => { }
             return;
         }
 
-        // 3. Command Checks for specific restrictions
+        // 3. Command Checks
         const useMatch = currentLine.match(/^\s*USE\s+([a-zA-Z0-9_]+)/i);
         const activeDb = useDatabaseStore.getState().activeDatabase; // Read fresh from store
         const isTableCommand = /\b(CREATE|DROP|ALTER|TRUNCATE)\s+TABLE\b/i.test(currentLine);
         const isSwitchingDb = !!useMatch;
 
-        // Block table commands if no database selected (Safety)
+        // Block table commands if no database selected
         if (isTableCommand && !activeDb && !isSwitchingDb) {
             term.write('\r\n\x1b[31mError: No database selected. Please select or USE a database first.\x1b[0m\r\n');
-            inputBufferRef.current = '';
             invoke('write_terminal', { id: 'term-1', data: '\r\n' });
             return;
         }
 
-        // 4. Danger Check (for PTY commands)
-        // Note: SQL commands handled above already executed. 
-        // If we want Danger Check for SQL, it must move up.
-        // Assuming SQL DELETE/DROP are dangerous? YES.
-        // Current logic: SQL runs via Backend. PTY runs dangerous checks.
-        // FIX: If DANGEROUS_REGEX matches, we should prompt confirmation REGARDLESS of isSql?
-        // Let's implement that for safety.
-
         // 4. Danger Check (Safe Mode Only)
-        // Only require confirmation if readOnly (Safe Mode) is active
         if (readOnly && DANGEROUS_REGEX.test(currentLine)) {
             setPendingCommand(currentLine);
             setShowConfirm(true);
@@ -178,7 +171,6 @@ export default function TerminalPanel({ readOnly = true, setReadOnly = () => { }
 
         // Fallback: Send the buffered command to PTY
         await invoke('write_terminal', { id: 'term-1', data: currentLine + '\r' });
-        inputBufferRef.current = '';
     };
 
 
@@ -207,53 +199,94 @@ export default function TerminalPanel({ readOnly = true, setReadOnly = () => { }
         xtermRef.current = term;
         fitAddonRef.current = fitAddon;
 
-        // Key Listener (History)
+        // Helper to redraw line during editing
+        const redrawLine = (newBuffer: string, newCursor: number) => {
+            // 1. Move cursor to start of input (assuming prompt is already printed)
+            // Strategy: Clear from current cursor back to start?
+            // Actually, simplest is to use carriage return (simulated) or backspaces.
+            // We need to know how many chars we printed previously.
+            // PROBLEM: We don't know prompt length easily.
+            // BUT: We know inputBufferRef.length (old).
+            // So: Move cursor LEFT by oldCursorPos.
+            const oldCursor = inputCursorRef.current;
+            if (oldCursor > 0) {
+                term.write('\x1b[D'.repeat(oldCursor));
+            }
+            // Clear to right
+            term.write('\x1b[K');
+
+            // Write new buffer
+            term.write(newBuffer);
+
+            // Move cursor to newPos (which is left from end)
+            const distanceBack = newBuffer.length - newCursor;
+            if (distanceBack > 0) {
+                term.write('\x1b[D'.repeat(distanceBack));
+            }
+
+            inputBufferRef.current = newBuffer;
+            inputCursorRef.current = newCursor;
+        };
+
+        // Key Listener
         term.onKey(({ domEvent }) => {
             if (!useDatabaseStore.getState().isConnected) return;
             const ev = domEvent as KeyboardEvent;
 
+            // Allow copy (Ctrl+C handled by OS usually, but check)
+
             if (ev.key === 'ArrowUp') {
                 const history = historyRef.current;
                 const idx = historyIndexRef.current;
-
                 if (history.length === 0) return;
 
                 const newIndex = Math.min(idx + 1, history.length - 1);
                 const item = history[newIndex];
 
                 if (item !== undefined) {
-                    // Clear current buffer visual
-                    const currentLen = inputBufferRef.current.length;
-                    if (currentLen > 0) {
-                        term.write('\b \b'.repeat(currentLen));
-                    }
-
-                    term.write(item);
-                    inputBufferRef.current = item;
+                    redrawLine(item, item.length);
                     historyIndexRef.current = newIndex;
                 }
-            } else if (ev.key === 'ArrowDown') {
+            }
+            else if (ev.key === 'ArrowDown') {
                 const history = historyRef.current;
                 const idx = historyIndexRef.current;
-
                 if (idx === -1) return;
 
                 const newIndex = Math.max(idx - 1, -1);
 
-                // Clear current
-                const currentLen = inputBufferRef.current.length;
-                if (currentLen > 0) {
-                    term.write('\b \b'.repeat(currentLen));
-                }
-
                 if (newIndex === -1) {
-                    inputBufferRef.current = '';
+                    redrawLine('', 0);
                     historyIndexRef.current = -1;
                 } else {
                     const item = history[newIndex];
-                    term.write(item);
-                    inputBufferRef.current = item;
+                    redrawLine(item, item.length);
                     historyIndexRef.current = newIndex;
+                }
+            }
+            else if (ev.key === 'ArrowLeft') {
+                if (inputCursorRef.current > 0) {
+                    inputCursorRef.current--;
+                    term.write('\x1b[D');
+                }
+            }
+            else if (ev.key === 'ArrowRight') {
+                if (inputCursorRef.current < inputBufferRef.current.length) {
+                    inputCursorRef.current++;
+                    term.write('\x1b[C');
+                }
+            }
+            else if (ev.key === 'Home') {
+                if (inputCursorRef.current > 0) {
+                    term.write('\x1b[D'.repeat(inputCursorRef.current));
+                    inputCursorRef.current = 0;
+                }
+            }
+            else if (ev.key === 'End') {
+                const len = inputBufferRef.current.length;
+                if (inputCursorRef.current < len) {
+                    term.write('\x1b[C'.repeat(len - inputCursorRef.current));
+                    inputCursorRef.current = len;
                 }
             }
         });
@@ -261,20 +294,55 @@ export default function TerminalPanel({ readOnly = true, setReadOnly = () => { }
         // Data Listener (Input)
         term.onData(async (data) => {
             if (!useDatabaseStore.getState().isConnected) return;
-            // Ignore ANSI (Arrow keys sent as sequences)
+            // Ignore ANSI sequences we handled in onKey
             if (data.startsWith('\x1b[')) return;
 
             if (data === '\r') {
                 handleEnter(term);
             } else if (data === '\u007F') { // Backspace
                 const cur = inputBufferRef.current;
-                if (cur.length > 0) {
-                    term.write('\b \b');
-                    inputBufferRef.current = cur.slice(0, -1);
+                const pos = inputCursorRef.current;
+                if (pos > 0) {
+                    const params = cur.slice(0, pos - 1) + cur.slice(pos);
+                    // Optimized redraw: 
+                    // 1. Move left 1
+                    // 2. Clear line to right
+                    // 3. Print tail
+                    // 4. Move cursor back
+                    // Actually, let's just use the redraw helper for consistency, 
+                    // though it might flicker if heavy. For local echo, it's fine.
+                    // But wait: redrawLine moves cursor relative to OLD inputCursorRef.
+                    // We must be careful.
+
+                    // Manual Backspace Logic for smoothness:
+                    term.write('\b\x1b[K'); // Backspace + Clear Right
+                    const tail = cur.slice(pos);
+                    term.write(tail);
+                    // Move back to new pos
+                    if (tail.length > 0) term.write('\x1b[D'.repeat(tail.length));
+
+                    inputBufferRef.current = params;
+                    inputCursorRef.current = pos - 1;
                 }
             } else if (data.charCodeAt(0) >= 32) {
-                inputBufferRef.current += data;
+                // Printable
+                const cur = inputBufferRef.current;
+                const pos = inputCursorRef.current;
+
+                const newVal = cur.slice(0, pos) + data + cur.slice(pos);
+
+                // Print char
                 term.write(data);
+
+                // If inserting in middle, print tail and reset cursor
+                const tail = cur.slice(pos);
+                if (tail.length > 0) {
+                    term.write(tail);
+                    term.write('\x1b[D'.repeat(tail.length));
+                }
+
+                inputBufferRef.current = newVal;
+                inputCursorRef.current = pos + data.length;
             }
         });
 
