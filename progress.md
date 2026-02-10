@@ -43,3 +43,17 @@ To elevate Truncate IDE to a world-class tool, we will focus on the following ke
 ### 4. Architecture
 - **Connection Pool Manager**: Centralize connection management to effectively handle multiple active tabs and databases, optimizing resource usage and preventing connection leaks.
 - **Plugin System**: Develop a plugin architecture that allows users to write small JavaScript or Rust plugins. This will extend functionality and foster a community-driven ecosystem around Truncate IDE.
+
+## 🛠 Deep Technical Roadmap: Reliability & Performance
+
+To ensure Truncate IDE scales from local development tools to enterprise-grade environments, we are targeting low-level optimizations in the database and filesystem layers.
+
+### 1. Database Layer Optimization
+- **Streaming Result Sets**: Currently, queries load entire result sets into memory via `fetch_all`, which can cause OOM errors on large datasets. We will transition to cursor-based streaming (using `sqlx::query().fetch()`) to process rows incrementally, enabling the handling of millions of records with constant memory overhead.
+- **AST-Based Query Safety**: Replace the current regex/string-based safety checks with a full SQL parser and Abstract Syntax Tree (AST) analysis. This will provide mathematically strict enforcement of "Read-Only" modes, eliminating edge cases where complex destructive queries might bypass simple string matching.
+- **Adaptive Connection Pooling**: Move beyond static configuration to an adaptive pooling strategy that dynamically scales the connection count based on system load and query latency, preventing resource starvation during high-concurrency scenarios.
+
+### 2. Filesystem & OS Integration
+- **Secure Credential Storage**: Integrate directly with the OS-level secure storage (macOS Keychain, Windows Credential Manager, Linux Secret Service) to persist database passwords. This avoids storing sensitive credentials in plain text configuration files or holding them in memory longer than necessary.
+- **Socket Discovery Watcher**: Implement a filesystem watcher (using `notify` crate) on standard socket directories (e.g., `/tmp`, `/var/run`) to automatically detect and surface new local database instances in real-time, removing the need for manual refreshes.
+- **Atomic Write-Ahead Logging (WAL)**: For future SQLite support, we will enforce WAL mode by default. This changes the underlying file system interaction pattern to allow concurrent readers and writers, significantly improving performance and preventing "database is locked" errors common in standard rollback journal modes.
