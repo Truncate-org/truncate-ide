@@ -107,7 +107,8 @@ async fn sql_run_query(
     
     // Inject Formatted Text for Terminal
     if let QueryResult::ResultSet(ref mut preview) = result {
-        let formatted = crate::sql_utils::format_table(&preview.columns, &preview.rows);
+        let col_names: Vec<String> = preview.columns.iter().map(|c| c.name.clone()).collect();
+        let formatted = crate::sql_utils::format_table(&col_names, &preview.rows);
         preview.formatted_output = Some(formatted);
     }
     

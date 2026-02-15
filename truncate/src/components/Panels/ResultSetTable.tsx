@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { TablePreview } from '../../store/databaseStore';
 import { ArrowUp, ArrowDown, Filter, X, Search } from 'lucide-react';
-import { processRows, inferColumnTypes, SortState, FilterState, ColumnType } from '../../utils/dataProcessing';
+import { processRows, SortState, FilterState, ColumnType } from '../../utils/dataProcessing';
 import clsx from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -38,18 +38,24 @@ const ResultSetTable: React.FC<ResultSetTableProps> = ({ data }) => {
     const [globalSearch, setGlobalSearch] = useState('');
     const [activeFilterCol, setActiveFilterCol] = useState<number | null>(null);
 
-    // Reset state when data changes (new query run)
     useEffect(() => {
         setSortState(null);
         setFilterState({});
         setGlobalSearch('');
         setActiveFilterCol(null);
-    }, [data.rows]); // Depend on rows reference changing which happens on new query
+    }, [data.rows]);
 
-    // 1. Infer Types (Memoized)
-    const columnTypes = useMemo(() => inferColumnTypes(data.rows, data.columns), [data.rows, data.columns]);
+    // Map backend types to frontend simplified types for filtering/sorting
+    const columnTypes: ColumnType[] = useMemo(() => {
+        return data.columns.map(col => {
+            const t = col.type_name.toLowerCase();
+            if (t.includes('int') || t.includes('float') || t.includes('decimal') || t.includes('double') || t.includes('numeric') || t.includes('real')) return 'number';
+            if (t.includes('date') || t.includes('time') || t.includes('timestamp')) return 'date';
+            if (t.includes('bool') || t.includes('bit')) return 'boolean';
+            return 'string';
+        });
+    }, [data.columns]);
 
-    // 2. Process Data (Memoized)
     const visibleRows = useMemo(() => {
         return processRows(data.rows, columnTypes, sortState, filterState, globalSearch);
     }, [data.rows, columnTypes, sortState, filterState, globalSearch]);
@@ -58,14 +64,14 @@ const ResultSetTable: React.FC<ResultSetTableProps> = ({ data }) => {
         setSortState(prev => {
             if (prev?.columnIndex === colIdx) {
                 if (prev.direction === 'asc') return { columnIndex: colIdx, direction: 'desc' };
-                if (prev.direction === 'desc') return null; // Reset
+                if (prev.direction === 'desc') return null;
             }
             return { columnIndex: colIdx, direction: 'asc' };
         });
     };
 
     const toggleFilterMenu = (e: React.MouseEvent, colIdx: number) => {
-        e.stopPropagation(); // Prevent sort
+        e.stopPropagation();
         setActiveFilterCol(prev => prev === colIdx ? null : colIdx);
     };
 
@@ -73,16 +79,12 @@ const ResultSetTable: React.FC<ResultSetTableProps> = ({ data }) => {
         setFilterState(prev => {
             const newState = { ...prev };
             if (!value && operator !== 'empty') {
-                // Remove filter if value is empty (unless operator is 'is empty' which we didn't implement yet)
                 delete newState[colIdx];
                 return newState;
             }
             newState[colIdx] = [{ operator, value, value2 }];
             return newState;
         });
-        // Keep menu open for refinement or close? Google sheets closes on apply usually or stays open.
-        // Let's close for now for cleaner UX or provide a "Close" button.
-        // setActiveFilterCol(null); 
     };
 
     const clearFilter = (colIdx: number) => {
@@ -94,33 +96,46 @@ const ResultSetTable: React.FC<ResultSetTableProps> = ({ data }) => {
         setActiveFilterCol(null);
     };
 
+    // Helper to get alignment class
+    const getAlignClass = (idx: number) => {
+        const type = columnTypes[idx];
+        if (type === 'number') return 'text-right justify-end';
+        // if (type === 'boolean') return 'text-center justify-center'; // Center bools? Maybe keep left for now.
+        return 'text-left justify-start';
+    };
+
     return (
-        <div className="flex flex-col h-full bg-editor-bg">
+        <div className="flex flex-col h-full bg-editor-bg font-sans">
             {/* Toolbar */}
             <div className="flex items-center justify-between p-2 border-b border-subtle bg-surface-secondary/50">
-                <div className="flex items-center flex-1 max-w-sm relative">
-                    <Search className="w-4 h-4 absolute left-3 text-secondary opacity-70" />
+                <div className="flex items-center flex-1 max-w-sm relative group">
+                    <Search className="w-4 h-4 absolute left-3 text-secondary group-focus-within:text-blue-400 transition-colors" />
                     <input
                         type="text"
                         placeholder="Search results..."
-                        className="w-full bg-[#1e1e1e] border-none text-sm text-primary pl-9 pr-2 py-1.5 rounded focus:ring-1 focus:ring-blue-500/50 focus:outline-none placeholder-gray-600"
+                        className="w-full bg-[#1e1e1e] border border-transparent focus:border-blue-500/30 text-sm text-primary pl-9 pr-2 py-1.5 rounded transition-all focus:outline-none placeholder-gray-600"
                         value={globalSearch}
                         onChange={(e) => setGlobalSearch(e.target.value)}
                     />
                 </div>
-                <div className="flex items-center text-xs space-x-2 text-secondary ml-4">
-                    <span>{visibleRows.length} rows</span>
+                <div className="flex items-center text-xs space-x-3 text-secondary ml-4">
+                    <div className="flex items-baseline space-x-1">
+                        <span className="font-medium text-primary">{visibleRows.length}</span>
+                        <span className="opacity-70">rows</span>
+                    </div>
                     {(visibleRows.length !== data.rows.length) && (
-                        <span className="text-amber-500">(Filtered from {data.rows.length})</span>
+                        <span className="text-amber-500 flex items-center bg-amber-500/10 px-1.5 py-0.5 rounded">
+                            Filtered from {data.rows.length}
+                        </span>
                     )}
                     {data.limited && (
-                        <span className="text-[10px] uppercase tracking-wider text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20" title="Query result limited to 1000 rows by backend">
-                            Limited
+                        <span className="text-[10px] uppercase tracking-wider font-bold text-amber-500 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded shadow-sm" title="Limited to 1000 rows">
+                            Limited Result
                         </span>
                     )}
                     <button
                         onClick={() => { setFilterState({}); setSortState(null); setGlobalSearch(''); }}
-                        className="px-2 py-1 hover:bg-white/10 rounded transition-colors"
+                        className="px-2 py-1 hover:bg-white/10 rounded transition-colors text-gray-400 hover:text-white disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-gray-400"
                         disabled={!sortState && Object.keys(filterState).length === 0 && !globalSearch}
                     >
                         Reset View
@@ -129,64 +144,81 @@ const ResultSetTable: React.FC<ResultSetTableProps> = ({ data }) => {
             </div>
 
             {/* Table Area */}
-            <div className="flex-1 overflow-auto relative">
+            <div className="flex-1 overflow-auto relative scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
                 {visibleRows.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center pt-20 text-secondary opacity-60">
-                        <Filter className="w-8 h-8 mb-2" />
-                        <p>No rows match the current filters</p>
+                    <div className="flex flex-col items-center justify-center pt-24 text-secondary opacity-60">
+                        <div className="bg-white/5 p-4 rounded-full mb-3">
+                            <Filter className="w-8 h-8" />
+                        </div>
+                        <p className="font-medium">No rows match the current filters</p>
                         <button
                             onClick={() => { setFilterState({}); setGlobalSearch(''); }}
-                            className="mt-4 text-blue-400 hover:underline text-sm"
+                            className="mt-3 text-blue-400 hover:text-blue-300 hover:underline text-sm transition-colors"
                         >
-                            Clear filters
+                            Clear all filters
                         </button>
                     </div>
                 ) : (
                     <table className="w-full text-left border-collapse">
-                        <thead className="bg-[#252526] sticky top-0 z-20 shadow-sm">
+                        <thead className="bg-[#252526] sticky top-0 z-20 shadow-lg after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[1px] after:bg-[#3e3e3e]">
                             <tr>
+                                <th className="sticky left-0 z-30 w-10 min-w-[40px] border-b border-r border-[#3e3e3e] bg-[#2d2d2d] text-center text-[10px] text-gray-500 font-mono select-none">
+                                    #
+                                </th>
                                 {data.columns.map((col, idx) => {
                                     const isSorted = sortState?.columnIndex === idx;
                                     const isFiltered = !!filterState[idx];
                                     const type = columnTypes[idx];
+                                    const alignClass = getAlignClass(idx);
 
                                     return (
-                                        <th key={idx} className="group relative border-b border-r border-[#3e3e3e] min-w-[120px]">
-                                            {/* Header Content */}
+                                        <th key={idx} className="group relative border-b border-r border-[#3e3e3e] min-w-[150px] max-w-[400px]">
                                             <div
                                                 className={twMerge(
-                                                    "flex items-center justify-between px-4 py-2 text-xs font-semibold text-secondary cursor-pointer hover:bg-[#2a2d2e] select-none h-full transition-colors",
-                                                    isSorted && "bg-[#2a2d2e] text-primary"
+                                                    "flex items-center px-3 py-2 text-xs font-semibold text-secondary cursor-pointer hover:bg-[#2a2d2e] select-none h-full transition-colors",
+                                                    isSorted && "bg-[#2a2d2e] text-primary",
+                                                    alignClass // Align header content same as body? Usually headers logic left, numbers right
                                                 )}
                                                 onClick={() => handleHeaderClick(idx)}
                                             >
-                                                <div className="flex items-center truncate mr-2">
-                                                    <span className="truncate" title={col}>{col}</span>
+                                                {/* Column Name & Type Badge */}
+                                                <div className="flex flex-col min-w-0 mr-2">
+                                                    <div className="flex items-center space-x-1.5">
+                                                        {/* Type Icon/Badge */}
+                                                        <span className={clsx(
+                                                            "text-[9px] uppercase tracking-tighter font-bold px-1 rounded",
+                                                            type === 'number' ? "text-emerald-400 bg-emerald-400/10" :
+                                                                type === 'string' ? "text-blue-400 bg-blue-400/10" :
+                                                                    type === 'date' ? "text-purple-400 bg-purple-400/10" :
+                                                                        type === 'boolean' ? "text-orange-400 bg-orange-400/10" :
+                                                                            "text-gray-400 bg-gray-400/10"
+                                                        )}>
+                                                            {type.substr(0, 3)}
+                                                        </span>
+                                                        <span className="truncate" title={`${col.name} (${col.type_name})`}>{col.name}</span>
+                                                    </div>
                                                 </div>
 
-                                                <div className="flex items-center space-x-1 shrink-0">
-                                                    {/* Sort Indicator */}
+                                                <div className="flex items-center space-x-1 shrink-0 ml-auto">
                                                     {isSorted && (
                                                         sortState.direction === 'asc'
-                                                            ? <ArrowUp className="w-3 h-3 text-blue-400" />
-                                                            : <ArrowDown className="w-3 h-3 text-blue-400" />
+                                                            ? <ArrowUp className="w-3 h-3 text-blue-400 animate-in slide-in-from-bottom-1" />
+                                                            : <ArrowDown className="w-3 h-3 text-blue-400 animate-in slide-in-from-top-1" />
                                                     )}
 
-                                                    {/* Filter Trigger */}
                                                     <div
                                                         className={twMerge(
-                                                            "p-1 rounded hover:bg-white/10 transition-colors",
-                                                            isFiltered ? "text-blue-400 opacity-100" : "opacity-0 group-hover:opacity-50",
-                                                            activeFilterCol === idx && "opacity-100 bg-white/10"
+                                                            "p-1 rounded hover:bg-white/10 transition-colors opacity-0 group-hover:opacity-100",
+                                                            (isFiltered || activeFilterCol === idx) && "opacity-100",
+                                                            activeFilterCol === idx && "bg-white/10 text-white"
                                                         )}
                                                         onClick={(e) => toggleFilterMenu(e, idx)}
                                                     >
-                                                        <Filter className={clsx("w-3 h-3", isFiltered && "fill-current")} />
+                                                        <Filter className={clsx("w-3 h-3", isFiltered && "fill-blue-400 text-blue-400")} />
                                                     </div>
                                                 </div>
                                             </div>
 
-                                            {/* Filter Dropdown */}
                                             {activeFilterCol === idx && (
                                                 <FilterDropdown
                                                     colIdx={idx}
@@ -203,25 +235,40 @@ const ResultSetTable: React.FC<ResultSetTableProps> = ({ data }) => {
                                 })}
                             </tr>
                         </thead>
-                        <tbody className="text-sm text-primary font-mono">
+                        <tbody className="text-sm text-primary font-mono bg-[#1e1e1e]">
                             {visibleRows.map((row, rowIdx) => (
-                                <tr key={rowIdx} className="hover:bg-[#2a2d2e] transition-colors group">
-                                    {row.map((cell, cellIdx) => (
-                                        <td
-                                            key={cellIdx}
-                                            className="px-4 py-1.5 border-b border-r border-[#3e3e3e] whitespace-nowrap overflow-hidden text-ellipsis max-w-[300px]"
-                                            title={String(cell)}
-                                        >
-                                            {cell}
-                                        </td>
-                                    ))}
+                                <tr key={rowIdx} className="hover:bg-[#2a2d2e] transition-colors group even:bg-[#1e1e1e] odd:bg-[#212121]">
+                                    <td className="px-2 py-1.5 border-b border-r border-[#363636] text-[10px] text-gray-600 text-center select-none bg-[#252526]/50">
+                                        {rowIdx + 1}
+                                    </td>
+                                    {row.map((cell, cellIdx) => {
+                                        const type = columnTypes[cellIdx];
+                                        const alignClass = type === 'number' ? 'text-right' : 'text-left';
+
+                                        // Formatting for NULL
+                                        const isNull = cell === 'NULL';
+
+                                        return (
+                                            <td
+                                                key={cellIdx}
+                                                className={twMerge(
+                                                    "px-4 py-1.5 border-b border-r border-[#363636] whitespace-nowrap overflow-hidden text-ellipsis max-w-[300px]",
+                                                    alignClass,
+                                                    isNull && "text-gray-500 italic text-[11px]"
+                                                )}
+                                                title={String(cell)}
+                                            >
+                                                {isNull ? 'NULL' : cell}
+                                            </td>
+                                        );
+                                    })}
                                 </tr>
                             ))}
+                            {/* Empty space filler if needed, or simply let it be */}
                         </tbody>
                     </table>
                 )}
             </div>
-            {/* Dim background helper to close menus? Optional, usually click-outside listener is better */}
             {activeFilterCol !== null && (
                 <div className="fixed inset-0 z-10" onClick={() => setActiveFilterCol(null)} />
             )}

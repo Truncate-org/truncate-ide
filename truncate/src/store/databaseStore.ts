@@ -2,10 +2,16 @@ import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 
+export interface ColumnDefinition {
+    name: string;
+    type_name: string;
+}
+
 export interface TablePreview {
-    columns: string[];
+    columns: ColumnDefinition[];
     rows: string[][];
     limited?: boolean;
+    formatted_output?: string;
 }
 
 export interface QueryResult {

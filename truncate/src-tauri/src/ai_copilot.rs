@@ -1,13 +1,12 @@
-use tauri::{State, Emitter};
+use tauri::State;
 use serde::{Deserialize, Serialize};
 use crate::db_state::DbState;
 use crate::schema::Schema;
 use crate::adapter::DatabaseAdapter;
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 use once_cell::sync::Lazy;
 use tokio::task::AbortHandle;
-use futures_util::StreamExt; // Need futures dependency or just usage of bytes_stream if reqwest provides it
 
 // -----------------------------------------------------------------------------
 // 1. Data Structures
@@ -27,11 +26,7 @@ struct Message {
     content: String,
 }
 
-#[derive(Deserialize)]
-struct OllamaResponse {
-    message: Message,
-    done: bool,
-}
+
 
 // Global handle for the active AI request to allow cancellation
 static ACTIVE_REQUEST: Lazy<Mutex<Option<AbortHandle>>> = Lazy::new(|| Mutex::new(None));

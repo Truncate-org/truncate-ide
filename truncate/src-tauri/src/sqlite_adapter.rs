@@ -1,10 +1,9 @@
 use async_trait::async_trait;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions, SqliteRow, SqlitePool};
-use sqlx::{Row, Column, ValueRef};
+use sqlx::{Row, Column, ValueRef, TypeInfo};
 use std::time::Duration;
 use std::str::FromStr;
 use std::path::Path;
-
 use crate::adapter::{DatabaseAdapter, ConnectionConfig, ConnectionType};
 use crate::types::{QueryResult, TablePreview};
 use crate::schema::{Schema, Table, Column as SchemaColumn, ForeignKey};
@@ -257,48 +256,56 @@ impl DatabaseAdapter for SqliteAdapter {
 // Helper to map rows to TablePreview
 fn map_rows_to_preview(rows: Vec<SqliteRow>, limited: bool) -> Result<TablePreview, String> {
     if rows.is_empty() {
-        return Ok(TablePreview { columns: vec![], rows: vec![], limited: false, formatted_output: None });
+        return Ok(TablePreview {
+            columns: vec![],
+            rows: vec![],
+            limited,
+            formatted_output: None,
+        });
     }
 
-    let columns: Vec<String> = rows[0]
-        .columns()
-        .iter()
-        .map(|c| c.name().to_string())
-        .collect();
-
-    let mut refined_data_rows = Vec::new();
-    for row in rows {
-        let mut row_vals = Vec::new();
-        for col in row.columns() {
-            let col_name = col.name();
-            
-            // Sqlite type handling is dynamic but sqlx maps it.
-            // Try strings first, then others.
-            let val = if let Ok(v) = row.try_get::<String, _>(col_name) {
-                v
-            } else if let Ok(v) = row.try_get::<i64, _>(col_name) {
-                v.to_string()
-            } else if let Ok(v) = row.try_get::<f64, _>(col_name) {
-                v.to_string()
-            } else if let Ok(v) = row.try_get::<bool, _>(col_name) {
-                if v { "1".to_string() } else { "0".to_string() }
-            } else if let Ok(_) = row.try_get::<Vec<u8>, _>(col_name) {
-                 "<binary>".to_string()
-            } else {
-                 if row.try_get_raw(col_name).map(|r| r.is_null()).unwrap_or(false) {
-                     "NULL".to_string()
-                 } else {
-                     "<?>".to_string()
-                 }
-            };
-            row_vals.push(val);
+    // SQLite columns in rows have type info, but it might be dynamic per row.
+    // However, column definitions are usually static.
+    let first_row = &rows[0];
+    let columns: Vec<crate::types::ColumnDefinition> = first_row.columns().iter().map(|c| {
+        let type_info = c.type_info();
+        crate::types::ColumnDefinition {
+            name: c.name().to_string(),
+            type_name: type_info.name().to_string(), // e.g. "TEXT", "INTEGER"
         }
-        refined_data_rows.push(row_vals);
+    }).collect();
+
+    let mut data = Vec::new();
+
+    for row in rows {
+        let mut row_data = Vec::new();
+        for (i, _) in columns.iter().enumerate() {
+             if row.try_get_raw(i).map(|v| v.is_null()).unwrap_or(true) {
+                 row_data.push("NULL".to_string());
+                 continue;
+             }
+
+             let val_str = if let Ok(val) = row.try_get::<String, _>(i) {
+                 val
+             } else if let Ok(val) = row.try_get::<i64, _>(i) {
+                 val.to_string()
+             } else if let Ok(val) = row.try_get::<f64, _>(i) {
+                 val.to_string()
+             } else if let Ok(val) = row.try_get::<bool, _>(i) {
+                 val.to_string()
+             } else if let Ok(val) = row.try_get::<Vec<u8>, _>(i) {
+                 format!("Binary ({} bytes)", val.len())
+             } else {
+                 "UNSUPPORTED".to_string()
+             };
+             row_data.push(val_str);
+        }
+        data.push(row_data);
     }
 
     Ok(TablePreview {
         columns,
-        rows: refined_data_rows,
+        rows: data,
         limited,
         formatted_output: None,
     })

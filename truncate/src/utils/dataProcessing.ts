@@ -2,61 +2,8 @@
 export type ColumnType = 'string' | 'number' | 'date' | 'boolean';
 
 // Infer column types based on the first few rows of data
-export function inferColumnTypes(data: string[][], columns: string[]): ColumnType[] {
-    if (!data || data.length === 0) return columns.map(() => 'string');
-
-    // Check up to 20 rows to avoid performance hit on large datasets
-    const sampleSize = Math.min(data.length, 20);
-    const types: ColumnType[] = [];
-
-    for (let colIdx = 0; colIdx < columns.length; colIdx++) {
-        let isNumber = true;
-        let isDate = true;
-        let isBoolean = true;
-        let hasNonNull = false;
-
-        for (let rowIdx = 0; rowIdx < sampleSize; rowIdx++) {
-            const val = data[rowIdx][colIdx];
-            if (val === null || val === 'NULL') continue; // Skip nulls
-            hasNonNull = true;
-
-            // Check Number
-            if (isNumber && (val.trim() === '' || isNaN(Number(val)))) {
-                isNumber = false;
-            }
-
-            // Check Date (basic check)
-            if (isDate) {
-                const date = Date.parse(val);
-                if (isNaN(date)) isDate = false;
-                // Prevent simple numbers being treated as dates
-                if (!isNaN(Number(val))) isDate = false;
-            }
-
-            // Check Boolean
-            if (isBoolean) {
-                const lower = val.toLowerCase();
-                if (lower !== 'true' && lower !== 'false' && lower !== '1' && lower !== '0') {
-                    isBoolean = false;
-                }
-            }
-        }
-
-        if (!hasNonNull) {
-            types.push('string'); // Default to string if all null
-        } else if (isBoolean) {
-            types.push('boolean');
-        } else if (isNumber) {
-            types.push('number');
-        } else if (isDate) {
-            types.push('date');
-        } else {
-            types.push('string');
-        }
-    }
-
-    return types;
-}
+// DEPRECATED: We now use backend types. Keeping this comments or removing entirely.
+// Removing entire function.
 
 export type SortDirection = 'asc' | 'desc' | null;
 

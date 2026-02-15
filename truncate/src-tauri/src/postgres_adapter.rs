@@ -247,53 +247,72 @@ impl DatabaseAdapter for PostgresAdapter {
 
 fn map_rows_to_preview(rows: Vec<PgRow>, limited: bool) -> Result<TablePreview, String> {
     if rows.is_empty() {
-        return Ok(TablePreview { columns: vec![], rows: vec![], limited: false, formatted_output: None });
+        return Ok(TablePreview {
+            columns: vec![],
+            rows: vec![],
+            limited,
+            formatted_output: None,
+        });
     }
 
-    let columns: Vec<String> = rows[0]
-        .columns()
-        .iter()
-        .map(|c| c.name().to_string())
-        .collect();
-
-    let mut refined_data_rows = Vec::new();
-    for row in rows {
-        let mut row_vals = Vec::new();
-        for col in row.columns() {
-            let col_name = col.name();
-            
-            // Map Postgres types
-            // String
-            let val = if let Ok(v) = row.try_get::<String, _>(col_name) {
-                v
-            } else if let Ok(v) = row.try_get::<i64, _>(col_name) {
-                v.to_string()
-            } else if let Ok(v) = row.try_get::<i32, _>(col_name) {
-                v.to_string()
-            } else if let Ok(v) = row.try_get::<f64, _>(col_name) {
-                v.to_string()
-            } else if let Ok(v) = row.try_get::<bool, _>(col_name) {
-                if v { "t".to_string() } else { "f".to_string() }
-            } else if let Ok(v) = row.try_get::<f32, _>(col_name) {
-                 v.to_string()
-            } else if let Ok(_) = row.try_get::<Vec<u8>, _>(col_name) {
-                 "<binary>".to_string()
-            } else {
-                 if row.try_get_raw(col_name).map(|r| r.is_null()).unwrap_or(false) {
-                     "NULL".to_string()
-                 } else {
-                     let type_info = col.type_info();
-                     format!("<{}>", type_info.name())
-                 }
-            };
-            row_vals.push(val);
+    let first_row = &rows[0];
+    let columns: Vec<crate::types::ColumnDefinition> = first_row.columns().iter().map(|c| {
+        let type_info = c.type_info();
+        crate::types::ColumnDefinition {
+            name: c.name().to_string(),
+            type_name: type_info.name().to_string(), // e.g. "VARCHAR", "INT4", "BOOL"
         }
-        refined_data_rows.push(row_vals);
+    }).collect();
+
+    let mut data = Vec::new();
+
+    for row in rows {
+        let mut row_data = Vec::new();
+        for (i, _) in columns.iter().enumerate() {
+            // Check NULL first
+            if row.try_get_raw(i).map(|v| v.is_null()).unwrap_or(true) {
+                row_data.push("NULL".to_string());
+                continue;
+            }
+
+            // Attempt type-specific extractions
+            let val_str = if let Ok(val) = row.try_get::<String, _>(i) {
+                val
+            } else if let Ok(val) = row.try_get::<i64, _>(i) { // Handles INT8
+                val.to_string()
+            } else if let Ok(val) = row.try_get::<i32, _>(i) { // Handles INT4
+                val.to_string()
+            } else if let Ok(val) = row.try_get::<i16, _>(i) { // Handles INT2
+                val.to_string()
+            } else if let Ok(val) = row.try_get::<f64, _>(i) {
+                val.to_string()
+            } else if let Ok(val) = row.try_get::<bool, _>(i) {
+                val.to_string()
+            } else if let Ok(val) = row.try_get::<rust_decimal::Decimal, _>(i) {
+                 val.to_string()
+            } else if let Ok(val) = row.try_get::<uuid::Uuid, _>(i) {
+                 val.to_string()
+            } else if let Ok(val) = row.try_get::<chrono::NaiveDateTime, _>(i) {
+                 val.to_string()
+            } else if let Ok(val) = row.try_get::<chrono::NaiveDate, _>(i) {
+                 val.to_string()
+            } else if let Ok(val) = row.try_get::<serde_json::Value, _>(i) {
+                 val.to_string()
+            } else if let Ok(val) = row.try_get::<Vec<u8>, _>(i) {
+                 format!("Binary ({} bytes)", val.len())
+            } else {
+                 // Fallback for unhandled types
+                 "UNSUPPORTED_TYPE".to_string()
+            };
+            
+            row_data.push(val_str);
+        }
+        data.push(row_data);
     }
 
     Ok(TablePreview {
         columns,
-        rows: refined_data_rows,
+        rows: data,
         limited,
         formatted_output: None,
     })

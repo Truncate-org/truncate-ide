@@ -343,51 +343,86 @@ impl DatabaseAdapter for MySqlAdapter {
 // Helper to map rows to TablePreview (copied from lib.rs and adapted)
 fn map_rows_to_preview(rows: Vec<MySqlRow>, limited: bool) -> Result<TablePreview, String> {
     if rows.is_empty() {
-        return Ok(TablePreview { columns: vec![], rows: vec![], limited: false, formatted_output: None });
+        return Ok(TablePreview {
+            columns: vec![], // indeterminate columns if no rows? 
+                             // Ideally we get columns from statement execution even if empty, 
+                             // but sqlx fetch_all returns rows. 
+                             // Only way to get cols without rows is explicit Describe or from a row.
+                             // For now empty is empty.
+            rows: vec![],
+            limited,
+            formatted_output: None,
+        });
     }
 
-    let columns: Vec<String> = rows[0]
-        .columns()
-        .iter()
-        .map(|c| c.name().to_string())
-        .collect();
-
-    let mut refined_data_rows = Vec::new();
-    for row in rows {
-        let mut row_vals = Vec::new();
-        for col in row.columns() {
-            let col_name = col.name();
-            // Attempt to handle common types
-            let val = if let Ok(v) = row.try_get::<String, _>(col_name) {
-                v
-            } else if let Ok(v) = row.try_get::<i64, _>(col_name) {
-                v.to_string()
-            } else if let Ok(v) = row.try_get::<f64, _>(col_name) {
-                v.to_string()
-            } else if let Ok(v) = row.try_get::<bool, _>(col_name) {
-                if v { "1".to_string() } else { "0".to_string() }
-            } else if let Ok(v) = row.try_get::<i32, _>(col_name) {
-                 v.to_string()
-            } else if let Ok(v) = row.try_get::<f32, _>(col_name) {
-                 v.to_string()
-            } else if let Ok(_) = row.try_get::<Vec<u8>, _>(col_name) {
-                 "<binary>".to_string()
-            } else {
-                 if row.try_get_raw(col_name).map(|r| r.is_null()).unwrap_or(false) {
-                     "NULL".to_string()
-                 } else {
-                     let type_info = col.type_info();
-                     format!("<{}>", type_info.name())
-                 }
-            };
-            row_vals.push(val);
+    // Capture columns from the first row
+    let first_row = &rows[0];
+    let columns: Vec<crate::types::ColumnDefinition> = first_row.columns().iter().map(|c| {
+        let type_info = c.type_info();
+        crate::types::ColumnDefinition {
+            name: c.name().to_string(),
+            type_name: type_info.name().to_string(), // e.g. "VARCHAR", "INT", etc.
         }
-        refined_data_rows.push(row_vals);
+    }).collect();
+
+    let mut data = Vec::new();
+
+    for row in rows {
+        let mut row_data = Vec::new();
+        for (i, _) in columns.iter().enumerate() {
+            // Using try_get_unchecked or generic try_get with index
+            // We need to match based on type name to format correctly.
+            // SQLx ValueRef might be better but let's try strict decoding based on type name
+            
+            let val_str = if let Ok(val) = row.try_get::<String, _>(i) {
+                val // It's a string, easy
+            } else if let Ok(val) = row.try_get::<i64, _>(i) {
+                val.to_string()
+            } else if let Ok(val) = row.try_get::<u64, _>(i) {
+                val.to_string()
+            } else if let Ok(val) = row.try_get::<f64, _>(i) {
+                val.to_string()
+            } else if let Ok(val) = row.try_get::<bool, _>(i) {
+                val.to_string() // "true" / "false"
+            } else if let Ok(val) = row.try_get::<rust_decimal::Decimal, _>(i) {
+                val.to_string()
+            } else if let Ok(val) = row.try_get::<chrono::NaiveDateTime, _>(i) {
+                val.to_string()
+            } else if let Ok(val) = row.try_get::<chrono::NaiveDate, _>(i) {
+                val.to_string()
+            } else if let Ok(val) = row.try_get::<chrono::NaiveTime, _>(i) {
+                val.to_string()
+            } else if let Ok(val) = row.try_get::<Vec<u8>, _>(i) {
+                 format!("Binary ({} bytes)", val.len())
+            } else {
+                // If everything fails, it might be NULL or unknown
+                if row.try_get_raw(i).map(|v| v.is_null()).unwrap_or(false) {
+                    "NULL".to_string()
+                } else {
+                     // Fallback string lossy?
+                     // Attempt to debug format if possible or just <UNKNOWN>
+                     // Actually, try_get::<String> usually handles many types if sqlx converts them.
+                     // If it failed above, it's tricky.
+                     // Attempt JSON value?
+                     "NULL".to_string() // keeping safe for now, checking raw nullity above
+                }
+            };
+
+            // Double check nullity explicitly because try_get might fail on type mismatch rather than null
+            let final_val = if row.try_get_raw(i).map(|v| v.is_null()).unwrap_or(true) {
+                 "NULL".to_string()
+            } else {
+                 val_str
+            };
+
+            row_data.push(final_val);
+        }
+        data.push(row_data);
     }
 
     Ok(TablePreview {
         columns,
-        rows: refined_data_rows,
+        rows: data,
         limited,
         formatted_output: None,
     })

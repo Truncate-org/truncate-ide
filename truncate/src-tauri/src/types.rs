@@ -1,8 +1,14 @@
 use serde::Serialize;
 
 #[derive(Serialize, Clone, Debug)]
+pub struct ColumnDefinition {
+    pub name: String,
+    pub type_name: String,
+}
+
+#[derive(Serialize, Clone, Debug)]
 pub struct TablePreview {
-    pub columns: Vec<String>,
+    pub columns: Vec<ColumnDefinition>,
     pub rows: Vec<Vec<String>>,
     pub limited: bool,
     pub formatted_output: Option<String>,
@@ -23,4 +29,3 @@ pub struct CsvInspection {
     pub separator: char,
     pub preview: Vec<Vec<String>>,
 }
-
