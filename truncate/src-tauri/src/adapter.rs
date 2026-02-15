@@ -35,6 +35,7 @@ pub trait DatabaseAdapter: Send + Sync {
     async fn get_current_database(&self) -> Result<String, String>;
     fn get_connection_config(&self) -> ConnectionConfig;
     async fn extract_schema(&self, db_name: &str) -> Result<crate::schema::Schema, String>;
+    async fn drop_database(&mut self, db_name: &str) -> Result<(), String>;
 }
 
 pub enum DbAdapter {
@@ -133,6 +134,15 @@ impl DatabaseAdapter for DbAdapter {
             DbAdapter::Postgres(a) => a.extract_schema(db_name).await,
             DbAdapter::Sqlite(a) => a.extract_schema(db_name).await,
             DbAdapter::Csv(a) => a.extract_schema(db_name).await,
+        }
+    }
+
+    async fn drop_database(&mut self, db_name: &str) -> Result<(), String> {
+        match self {
+            DbAdapter::MySql(a) => a.drop_database(db_name).await,
+            DbAdapter::Postgres(a) => a.drop_database(db_name).await,
+            DbAdapter::Sqlite(a) => a.drop_database(db_name).await,
+            DbAdapter::Csv(a) => a.drop_database(db_name).await,
         }
     }
 }

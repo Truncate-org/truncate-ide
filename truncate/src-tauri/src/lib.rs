@@ -167,6 +167,48 @@ async fn export_database_schema(
     crate::schema::save_schema_files(&schema, &download_path, &app_handle)
 }
 
+#[tauri::command]
+async fn drop_database(
+    window: tauri::Window,
+    state: State<'_, DbState>,
+    database_name: String
+) -> Result<(), String> {
+    let mut guard = state.adapter.lock().await;
+    let adapter = guard.as_mut().ok_or("No active connection")?;
+
+    // 1. Check if we are deleting the CURRENT active database
+    let current_db_res = adapter.get_current_database().await;
+    
+    // Some adapters might fail to get current DB, ignore that for check if needed or handle gracefully
+    if let Ok(current) = current_db_res {
+        if current == database_name {
+            // Dangerous! We need to switch away first.
+            let config = adapter.get_connection_config();
+            match config.db_type {
+                crate::adapter::ConnectionType::MySQL => {
+                    // Switch to 'mysql' or 'information_schema'? 'mysql' is standard system DB.
+                    // Or just 'sys'? 'mysql' is usually safe choice for admin connection.
+                    let _ = adapter.switch_database("mysql").await;
+                    // Update UI that we switched?
+                    let _ = window.emit("db-switched", "mysql");
+                },
+                crate::adapter::ConnectionType::PostgreSQL => {
+                    let _ = adapter.switch_database("postgres").await;
+                    let _ = window.emit("db-switched", "postgres");
+                },
+                _ => {
+                    // For others, maybe we can't switch?
+                }
+            }
+        }
+    }
+
+    // 2. Perform Drop
+    adapter.drop_database(&database_name).await?;
+
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -191,6 +233,7 @@ pub fn run() {
             sql_run_query,
             disconnect_database,
             export_database_schema,
+            drop_database,
             start_terminal,
             write_terminal,
             resize_terminal,

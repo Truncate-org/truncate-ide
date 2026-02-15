@@ -3,7 +3,8 @@ import { useDatabaseStore } from '../../store/databaseStore';
 import { ConnectionCard } from './ConnectionCard';
 import { CreateDatabaseModal } from '../Modals/CreateDatabaseModal';
 import { CreateTableModal } from '../Modals/CreateTableModal';
-import { Database, Table, ChevronDown, Layers, LogOut, Link, Plus } from 'lucide-react';
+import { DeleteDatabaseModal } from '../Modals/DeleteDatabaseModal';
+import { Database, Table, ChevronDown, Layers, LogOut, Link, Plus, Trash2 } from 'lucide-react';
 import clsx from 'clsx';
 
 const DatabaseExplorer: React.FC = () => {
@@ -38,8 +39,19 @@ const DatabaseExplorer: React.FC = () => {
     const [showConnectionForm, setShowConnectionForm] = React.useState(false);
     const [showCreateDbModal, setShowCreateDbModal] = React.useState(false);
     const [showCreateTableModal, setShowCreateTableModal] = React.useState(false);
+    const [dbToDelete, setDbToDelete] = React.useState<string | null>(null);
 
     const supportsCreateDb = connectionType === 'mysql' || connectionType === 'postgres';
+
+    const isSystemDb = (name: string) => {
+        if (connectionType === 'mysql') {
+            return ['information_schema', 'mysql', 'performance_schema', 'sys'].includes(name);
+        }
+        if (connectionType === 'postgres') {
+            return ['postgres', 'template0', 'template1'].includes(name); // 'postgres' is roughly equivalent to 'mysql'
+        }
+        return false;
+    };
 
     // Reset connection form view when successfully connected
     React.useEffect(() => {
@@ -121,20 +133,36 @@ const DatabaseExplorer: React.FC = () => {
                                         <Database className="w-3.5 h-3.5 text-gray-500 shrink-0" />
                                         <span className="text-gray-300 truncate">{dbName}</span>
                                     </div>
-                                    <button
-                                        onClick={() => selectDatabase(dbName)}
-                                        className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium text-blue-400 border border-blue-400/30 rounded hover:bg-blue-400/10 transition-colors shrink-0 opacity-0 group-hover:opacity-100"
-                                        title={`Connect to ${dbName}`}
-                                    >
-                                        <Link className="w-3 h-3" />
-                                        Connect
-                                    </button>
+                                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        {supportsCreateDb && !isSystemDb(dbName) && (
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); setDbToDelete(dbName); }}
+                                                className="p-1 text-gray-500 hover:text-red-400 hover:bg-red-400/10 rounded transition-colors"
+                                                title="Delete Database"
+                                            >
+                                                <Trash2 size={13} />
+                                            </button>
+                                        )}
+                                        <button
+                                            onClick={() => selectDatabase(dbName)}
+                                            className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium text-blue-400 border border-blue-400/30 rounded hover:bg-blue-400/10 transition-colors shrink-0"
+                                            title={`Connect to ${dbName}`}
+                                        >
+                                            <Link className="w-3 h-3" />
+                                            Connect
+                                        </button>
+                                    </div>
                                 </div>
                             ))
                         )}
                     </div>
                 </div>
                 <CreateDatabaseModal isOpen={showCreateDbModal} onClose={() => setShowCreateDbModal(false)} />
+                <DeleteDatabaseModal
+                    isOpen={!!dbToDelete}
+                    databaseName={dbToDelete}
+                    onClose={() => setDbToDelete(null)}
+                />
             </div>
         );
     }

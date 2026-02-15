@@ -328,6 +328,16 @@ impl DatabaseAdapter for MySqlAdapter {
             tables,
         })
     }
+
+    async fn drop_database(&mut self, db_name: &str) -> Result<(), String> {
+        let pool = self.pool.as_ref().ok_or("No database connection active")?;
+        let query = format!("DROP DATABASE `{}`", db_name);
+        sqlx::query(&query)
+            .execute(pool)
+            .await
+            .map_err(|e| format!("Failed to drop database: {}", e))?;
+        Ok(())
+    }
 }
 
 // Helper to map rows to TablePreview (copied from lib.rs and adapted)

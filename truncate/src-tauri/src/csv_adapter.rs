@@ -342,6 +342,10 @@ impl DatabaseAdapter for CsvAdapter {
     async fn extract_schema(&self, db_name: &str) -> Result<Schema, String> {
         self.sqlite_adapter.extract_schema(db_name).await
     }
+
+    async fn drop_database(&mut self, _db_name: &str) -> Result<(), String> {
+        Err("Drop database is not supported for CSV".to_string())
+    }
 }
 
 #[cfg(test)]

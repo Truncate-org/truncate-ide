@@ -217,6 +217,32 @@ impl DatabaseAdapter for PostgresAdapter {
     async fn extract_schema(&self, _db_name: &str) -> Result<crate::schema::Schema, String> {
         Err("Schema export not yet implemented for PostgreSQL".to_string())
     }
+
+    async fn drop_database(&mut self, db_name: &str) -> Result<(), String> {
+        let pool = self.pool.as_ref().ok_or("No database connection active")?;
+
+        // 1. Terminate connections
+        let terminate_sql = format!(
+            "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{}'", 
+            db_name
+        );
+        
+        // We use execute here, likely it returns rows but we ignore them? 
+        // pg_terminate_backend returns boolean. execute works.
+        sqlx::query(&terminate_sql)
+            .execute(pool)
+            .await
+            .map_err(|e| format!("Failed to terminate connections: {}", e))?;
+            
+        // 2. Drop Database
+        let drop_sql = format!("DROP DATABASE \"{}\"", db_name);
+        sqlx::query(&drop_sql)
+            .execute(pool)
+            .await
+            .map_err(|e| format!("Failed to drop database: {}", e))?;
+            
+        Ok(())
+    }
 }
 
 fn map_rows_to_preview(rows: Vec<PgRow>, limited: bool) -> Result<TablePreview, String> {

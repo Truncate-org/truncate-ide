@@ -248,6 +248,10 @@ impl DatabaseAdapter for SqliteAdapter {
              tables,
          })
     }
+
+    async fn drop_database(&mut self, _db_name: &str) -> Result<(), String> {
+        Err("Drop database is not supported for SQLite".to_string())
+    }
 }
 
 // Helper to map rows to TablePreview
