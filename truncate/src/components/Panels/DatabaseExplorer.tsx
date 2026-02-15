@@ -1,7 +1,9 @@
 import React from 'react';
 import { useDatabaseStore } from '../../store/databaseStore';
 import { ConnectionCard } from './ConnectionCard';
-import { Database, Table, ChevronDown, Layers, LogOut, Link } from 'lucide-react';
+import { CreateDatabaseModal } from '../Modals/CreateDatabaseModal';
+import { CreateTableModal } from '../Modals/CreateTableModal';
+import { Database, Table, ChevronDown, Layers, LogOut, Link, Plus } from 'lucide-react';
 import clsx from 'clsx';
 
 const DatabaseExplorer: React.FC = () => {
@@ -15,11 +17,29 @@ const DatabaseExplorer: React.FC = () => {
         selectTable,
         closeDatabase,
         connectionUser,
-        connectionType
+        connectionType,
+        connectionHost,
+        disconnect
     } = useDatabaseStore();
 
-    // Local state to toggle between database list and connection form
+    // For CSV/SQLite, show filename instead of raw config JSON
+    const displayLabel = React.useMemo(() => {
+        if (connectionType === 'csv' || connectionType === 'sqlite') {
+            if (connectionHost) {
+                const parts = connectionHost.replace(/\\/g, '/').split('/');
+                return parts[parts.length - 1] || connectionHost;
+            }
+            return connectionType.toUpperCase();
+        }
+        return connectionUser || connectionType || 'Connection';
+    }, [connectionType, connectionHost, connectionUser]);
+
+    // Local state
     const [showConnectionForm, setShowConnectionForm] = React.useState(false);
+    const [showCreateDbModal, setShowCreateDbModal] = React.useState(false);
+    const [showCreateTableModal, setShowCreateTableModal] = React.useState(false);
+
+    const supportsCreateDb = connectionType === 'mysql' || connectionType === 'postgres';
 
     // Reset connection form view when successfully connected
     React.useEffect(() => {
@@ -51,19 +71,38 @@ const DatabaseExplorer: React.FC = () => {
         return (
             <div className="h-full bg-panel text-gray-300 select-none overflow-y-auto font-sans text-[13px]">
                 <div className="flex flex-col">
-                    {/* Header with New Connection Button */}
+                    {/* Header with Back + New Connection Buttons */}
                     <div className="flex items-center justify-between px-2 py-2 text-gray-300 font-medium border-b border-subtle">
-                        <div className="flex items-center gap-1.5 text-blue-400">
-                            <Layers className="w-3.5 h-3.5" />
-                            <span>{connectionUser || connectionType || 'Connection'}</span>
+                        <div className="flex items-center gap-1.5 text-blue-400 min-w-0">
+                            <Layers className="w-3.5 h-3.5 shrink-0" />
+                            <span className="truncate">{displayLabel}</span>
                         </div>
-                        <button
-                            onClick={() => setShowConnectionForm(true)}
-                            className="px-2 py-0.5 text-[10px] font-medium text-gray-400 hover:text-blue-400 hover:bg-subtle rounded transition-colors"
-                            title="Add or change connection"
-                        >
-                            <Link className="w-3 h-3" />
-                        </button>
+                        <div className="flex items-center gap-1 shrink-0">
+                            {supportsCreateDb && (
+                                <button
+                                    onClick={() => setShowCreateDbModal(true)}
+                                    className="flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-medium text-green-400 hover:bg-green-400/10 rounded transition-colors border border-green-400/20"
+                                    title="Create a new database"
+                                >
+                                    <Plus className="w-3 h-3" />
+                                    <span>DB</span>
+                                </button>
+                            )}
+                            <button
+                                onClick={() => setShowConnectionForm(true)}
+                                className="px-2 py-0.5 text-[10px] font-medium text-gray-400 hover:text-blue-400 hover:bg-subtle rounded transition-colors"
+                                title="Add or change connection"
+                            >
+                                <Link className="w-3 h-3" />
+                            </button>
+                            <button
+                                onClick={() => disconnect()}
+                                className="px-2 py-0.5 text-[10px] font-medium text-gray-400 hover:text-red-400 hover:bg-subtle rounded transition-colors"
+                                title="Disconnect and return to connection page"
+                            >
+                                <LogOut className="w-3 h-3" />
+                            </button>
+                        </div>
                     </div>
 
                     {/* Database List with Connect Buttons */}
@@ -95,6 +134,7 @@ const DatabaseExplorer: React.FC = () => {
                         )}
                     </div>
                 </div>
+                <CreateDatabaseModal isOpen={showCreateDbModal} onClose={() => setShowCreateDbModal(false)} />
             </div>
         );
     }
@@ -139,6 +179,18 @@ const DatabaseExplorer: React.FC = () => {
                         </button>
                     </div>
 
+                    {/* + Table Button */}
+                    <div className="px-2 py-1.5 pl-10">
+                        <button
+                            onClick={() => setShowCreateTableModal(true)}
+                            className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium text-green-400 hover:bg-green-400/10 rounded transition-colors border border-green-400/20 border-dashed"
+                            title="Create a new table"
+                        >
+                            <Plus className="w-3 h-3" />
+                            New Table
+                        </button>
+                    </div>
+
                     {/* Tables */}
                     <div className="flex flex-col pb-1">
                         {tables.length === 0 ? (
@@ -163,6 +215,7 @@ const DatabaseExplorer: React.FC = () => {
                     </div>
                 </div>
             </div>
+            <CreateTableModal isOpen={showCreateTableModal} onClose={() => setShowCreateTableModal(false)} />
         </div>
     );
 };

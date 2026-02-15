@@ -1,11 +1,11 @@
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, memo, useCallback } from 'react';
 import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import 'xterm/css/xterm.css';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { useDatabaseStore } from '../../store/databaseStore';
-import { Terminal as TerminalIcon, AlertTriangle } from 'lucide-react';
+import { Terminal as TerminalIcon, AlertTriangle, Loader2 } from 'lucide-react';
 
 // VS Code Dark Modern Colors
 const THEME = {
@@ -31,12 +31,41 @@ const THEME = {
     brightWhite: '#e5e5e5',
 };
 
+// Prompt detection patterns per DB type
+const PROMPT_PATTERNS: Record<string, RegExp> = {
+    mysql: /mysql.*>\s*$/,
+    postgres: /[a-zA-Z_]+=?[#>]\s*$/,
+    sqlite: /sqlite>\s*$/,
+};
+
+// Dangerous command regex
+const DANGEROUS_REGEX = /\b(DROP|TRUNCATE|DELETE(\s+FROM)?(?!\s+WHERE)|UPDATE(\s+\w+)?(?!\s+SET\s+.*\s+WHERE))\b/i;
+
+// Count complete SQL statements (separated by ;)
+function countStatements(sql: string): number {
+    // Strip string literals and comments to avoid false ; matches
+    const cleaned = sql
+        .replace(/'[^']*'/g, "''")       // Remove string contents
+        .replace(/"[^"]*"/g, '""')       // Remove quoted identifiers
+        .replace(/--.*$/gm, '')          // Remove line comments
+        .replace(/\/\*[\s\S]*?\*\//g, '') // Remove block comments
+        .trim();
+
+    if (!cleaned) return 0;
+
+    // Split by ; and count non-empty segments
+    const parts = cleaned.split(';').filter(p => p.trim().length > 0);
+    // If input ends with ;, the last split will be empty, so we count the parts before
+    return parts.length;
+}
+
 interface TerminalPanelProps {
     readOnly?: boolean;
     setReadOnly?: (value: boolean) => void;
+    isVisible?: boolean;
 }
 
-export default function TerminalPanel({ readOnly = true, setReadOnly = () => { } }: TerminalPanelProps) {
+function TerminalPanelInner({ readOnly = true, setReadOnly: _setReadOnly = () => { }, isVisible = true }: TerminalPanelProps) {
     const terminalRef = useRef<HTMLDivElement>(null);
     const xtermRef = useRef<Terminal | null>(null);
     const fitAddonRef = useRef<FitAddon | null>(null);
@@ -44,11 +73,16 @@ export default function TerminalPanel({ readOnly = true, setReadOnly = () => { }
     // UI State
     const [showConfirm, setShowConfirm] = useState(false);
     const [pendingCommand, setPendingCommand] = useState<string | null>(null);
+    const [isExecuting, setIsExecuting] = useState(false);
 
     // Internal State (Refs for synchronous access in event listeners)
     const inputBufferRef = useRef('');
+    const multilineBufferRef = useRef('');  // Accumulates multiline input
     const historyRef = useRef<string[]>([]);
     const historyIndexRef = useRef(-1);
+    const inputCursorRef = useRef(0);
+    const isExecutingRef = useRef(false);
+    const wasFocusedRef = useRef(false);
 
     // Global Store
     const { isConnected, activeDatabase, refreshDatabases, refreshTables, selectDatabase, connectionType, connectionStatus } = useDatabaseStore();
@@ -56,123 +90,108 @@ export default function TerminalPanel({ readOnly = true, setReadOnly = () => { }
     // Logic Refs
     const pendingActionRef = useRef<{ type: 'DB_REFRESH' | 'TABLE_REFRESH' | 'DB_SWITCH', payload?: string } | null>(null);
     const lastSyncedDbRef = useRef<string | null>(null);
-    // Cursor position tracking (0-based index within inputBufferRef)
-    const inputCursorRef = useRef(0);
 
     // Regex Constants
     const DB_REFRESH_REGEX = /^(CREATE|DROP|ALTER)\s+DATABASE/i;
     const TABLE_REFRESH_REGEX = /^(CREATE|DROP|ALTER|TRUNCATE)\s+TABLE/i;
-    const DANGEROUS_REGEX = /\b(DROP|TRUNCATE|DELETE(\s+FROM)?(?!\s+WHERE)|UPDATE(\s+\w+)?(?!\s+SET\s+.*\s+WHERE))\b/i;
 
-    // Helper: Send Enter to PTY (Fallback/Standard)
-    const sendEnter = async () => {
-        await invoke('write_terminal', { id: 'term-1', data: '\r' });
-        inputBufferRef.current = '';
-        inputCursorRef.current = 0;
-    };
+    // Helper: Send raw data to PTY
+    const sendToPty = useCallback(async (data: string) => {
+        try {
+            await invoke('write_terminal', { id: 'term-1', data });
+        } catch (e) {
+            console.error('[Terminal] Failed to write to PTY:', e);
+        }
+    }, []);
 
-    // Helper: Confirm Dangerous Action
-    const confirmDanger = async () => {
+    // Helper: Confirm Dangerous Action — send the buffered command
+    const confirmDanger = useCallback(async () => {
         setShowConfirm(false);
-        await sendEnter();
-    };
-
-    // Main Input Handler
-    const handleEnter = async (term: Terminal) => {
-        let currentLine = inputBufferRef.current.trim();
-
-        // Fallback: Screen scraping if buffer empty
-        if (!currentLine) {
-            try {
-                const buffer = term.buffer.active;
-                const lineObj = buffer.getLine(buffer.baseY + buffer.cursorY);
-                if (lineObj) currentLine = lineObj.translateToString(true).trim();
-            } catch (e) { }
+        const cmd = pendingCommand;
+        setPendingCommand(null);
+        if (cmd) {
+            await sendToPty(cmd + '\r');
         }
+    }, [pendingCommand, sendToPty]);
 
-        console.log("[Terminal] Command:", currentLine);
+    // Main Enter handler — pure PTY pass-through with safety checks
+    const handleEnter = useCallback(async (term: Terminal) => {
+        const currentLine = inputBufferRef.current;
 
-        // 1. Update History
-        if (currentLine) {
-            if (historyRef.current[0] !== currentLine) {
-                historyRef.current = [currentLine, ...historyRef.current];
-            }
-            historyIndexRef.current = -1;
-        }
+        // Accumulate into multiline buffer
+        const fullBuffer = multilineBufferRef.current
+            ? multilineBufferRef.current + '\n' + currentLine
+            : currentLine;
 
-        // Reset Cursor/Buffer immediately
-        inputBufferRef.current = '';
-        inputCursorRef.current = 0;
+        const trimmed = fullBuffer.trim();
 
-        // 2. Intercept SQL Commands
-        const SQL_VERBS = /^(SELECT|WITH|INSERT|UPDATE|DELETE|CREATE|DROP|ALTER|PRAGMA|DESCRIBE|DESC|SHOW|EXPLAIN)\b/i;
-        const isSql = SQL_VERBS.test(currentLine);
-
-        if (isSql && useDatabaseStore.getState().isConnected) {
-            term.write('\r\n');
-
-            try {
-                // Execute Backend Query
-                const result: any = await invoke('sql_run_query', { sql: currentLine });
-
-                // Render Result
-                if (result && result.type === 'ResultSet' && result.data.formatted_output) {
-                    term.write(result.data.formatted_output);
-                } else if (result && result.type === 'Success') {
-                    term.write(`\r\n\x1b[32m${result.data}\x1b[0m\r\n`);
-                } else if (result && result.type === 'Error') {
-                    term.write(`\r\n\x1b[31m${result.data}\x1b[0m\r\n`);
-                } else {
-                    term.write('\r\nQuery Executed.\r\n');
-                }
-
-                // Restore Prompt
-                await invoke('write_terminal', { id: 'term-1', data: '\r' });
-
-            } catch (e) {
-                term.write(`\r\n\x1b[31mError: ${e}\x1b[0m\r\n`);
-                await invoke('write_terminal', { id: 'term-1', data: '\r' });
-            }
+        // 1. Check for multi-statement (more than 1 semicolon-terminated statement)
+        if (trimmed.includes(';') && countStatements(trimmed) > 1) {
+            term.write('\r\n\x1b[33m⚠  Run one statement at a time.\x1b[0m\r\n');
+            // Re-print the prompt by sending a blank Enter to PTY
+            await sendToPty('\r');
+            inputBufferRef.current = '';
+            inputCursorRef.current = 0;
+            multilineBufferRef.current = '';
             return;
         }
 
-        // 3. Command Checks
-        const useMatch = currentLine.match(/^\s*USE\s+([a-zA-Z0-9_]+)/i);
-        const activeDb = useDatabaseStore.getState().activeDatabase; // Read fresh from store
-        const isTableCommand = /\b(CREATE|DROP|ALTER|TRUNCATE)\s+TABLE\b/i.test(currentLine);
-        const isSwitchingDb = !!useMatch;
-
-        // Block table commands if no database selected
-        if (isTableCommand && !activeDb && !isSwitchingDb) {
-            term.write('\r\n\x1b[31mError: No database selected. Please select or USE a database first.\x1b[0m\r\n');
-            invoke('write_terminal', { id: 'term-1', data: '\r\n' });
-            return;
-        }
-
-        // 4. Danger Check (Safe Mode Only)
-        if (readOnly && DANGEROUS_REGEX.test(currentLine)) {
-            setPendingCommand(currentLine);
+        // 2. Safety check: dangerous commands in Safe Mode
+        if (readOnly && DANGEROUS_REGEX.test(trimmed) && trimmed.endsWith(';')) {
+            setPendingCommand(trimmed);
             setShowConfirm(true);
+            inputBufferRef.current = '';
+            inputCursorRef.current = 0;
+            multilineBufferRef.current = '';
             return;
         }
 
-        // 5. Pending Action Tracking
-        if (/\b(CREATE|DROP|ALTER)\s+DATABASE\b/i.test(currentLine)) {
+        // 3. Track pending actions for DB/table refresh
+        const useMatch = trimmed.match(/^\s*USE\s+([a-zA-Z0-9_]+)/i);
+        if (/\b(CREATE|DROP|ALTER)\s+DATABASE\b/i.test(trimmed)) {
             pendingActionRef.current = { type: 'DB_REFRESH' };
-        }
-        else if (isTableCommand) {
+        } else if (/\b(CREATE|DROP|ALTER|TRUNCATE)\s+TABLE\b/i.test(trimmed)) {
             pendingActionRef.current = { type: 'TABLE_REFRESH' };
-        }
-        else if (useMatch && useMatch[1]) {
+        } else if (useMatch && useMatch[1]) {
             pendingActionRef.current = { type: 'DB_SWITCH', payload: useMatch[1] };
         } else {
             pendingActionRef.current = null;
         }
 
-        // Fallback: Send the buffered command to PTY
-        await invoke('write_terminal', { id: 'term-1', data: currentLine + '\r' });
-    };
+        // 4. Check if statement is complete (ends with ;) or if it's a non-SQL command
+        const isStatementComplete = trimmed.endsWith(';');
+        const isMeta = /^\\|^SHOW\s|^DESCRIBE\s|^DESC\s|^EXPLAIN\s|^USE\s|^HELP|^QUIT|^EXIT|^\.quit|^\.tables|^\.schema|^\.exit/i.test(trimmed);
 
+        if (isStatementComplete || isMeta || !trimmed) {
+            // Complete statement or meta-command — mark as executing
+            if (trimmed) {
+                isExecutingRef.current = true;
+                setIsExecuting(true);
+
+                // Update history with the full multiline command
+                if (historyRef.current[0] !== trimmed) {
+                    historyRef.current = [trimmed, ...historyRef.current.slice(0, 100)];
+                }
+                historyIndexRef.current = -1;
+            }
+
+            // Send Enter to PTY — the CLI handles execution
+            await sendToPty('\r');
+
+            // Reset buffers
+            inputBufferRef.current = '';
+            inputCursorRef.current = 0;
+            multilineBufferRef.current = '';
+        } else {
+            // Incomplete statement — multiline: send Enter to PTY (CLI shows continuation prompt)
+            multilineBufferRef.current = fullBuffer;
+
+            await sendToPty('\r');
+
+            inputBufferRef.current = '';
+            inputCursorRef.current = 0;
+        }
+    }, [readOnly, sendToPty]);
 
     // INIT EFFECT
     useEffect(() => {
@@ -199,26 +218,15 @@ export default function TerminalPanel({ readOnly = true, setReadOnly = () => { }
         xtermRef.current = term;
         fitAddonRef.current = fitAddon;
 
-        // Helper to redraw line during editing
+        // Helper to redraw line during editing (arrow keys, history)
         const redrawLine = (newBuffer: string, newCursor: number) => {
-            // 1. Move cursor to start of input (assuming prompt is already printed)
-            // Strategy: Clear from current cursor back to start?
-            // Actually, simplest is to use carriage return (simulated) or backspaces.
-            // We need to know how many chars we printed previously.
-            // PROBLEM: We don't know prompt length easily.
-            // BUT: We know inputBufferRef.length (old).
-            // So: Move cursor LEFT by oldCursorPos.
             const oldCursor = inputCursorRef.current;
             if (oldCursor > 0) {
                 term.write('\x1b[D'.repeat(oldCursor));
             }
-            // Clear to right
             term.write('\x1b[K');
-
-            // Write new buffer
             term.write(newBuffer);
 
-            // Move cursor to newPos (which is left from end)
             const distanceBack = newBuffer.length - newCursor;
             if (distanceBack > 0) {
                 term.write('\x1b[D'.repeat(distanceBack));
@@ -228,12 +236,10 @@ export default function TerminalPanel({ readOnly = true, setReadOnly = () => { }
             inputCursorRef.current = newCursor;
         };
 
-        // Key Listener
+        // Key Listener — arrows, home, end
         term.onKey(({ domEvent }) => {
             if (!useDatabaseStore.getState().isConnected) return;
             const ev = domEvent as KeyboardEvent;
-
-            // Allow copy (Ctrl+C handled by OS usually, but check)
 
             if (ev.key === 'ArrowUp') {
                 const history = historyRef.current;
@@ -244,7 +250,9 @@ export default function TerminalPanel({ readOnly = true, setReadOnly = () => { }
                 const item = history[newIndex];
 
                 if (item !== undefined) {
-                    redrawLine(item, item.length);
+                    // For multiline history, only show the first line in the buffer
+                    const displayItem = item.replace(/\n/g, ' ');
+                    redrawLine(displayItem, displayItem.length);
                     historyIndexRef.current = newIndex;
                 }
             }
@@ -260,7 +268,8 @@ export default function TerminalPanel({ readOnly = true, setReadOnly = () => { }
                     historyIndexRef.current = -1;
                 } else {
                     const item = history[newIndex];
-                    redrawLine(item, item.length);
+                    const displayItem = item.replace(/\n/g, ' ');
+                    redrawLine(displayItem, displayItem.length);
                     historyIndexRef.current = newIndex;
                 }
             }
@@ -291,7 +300,7 @@ export default function TerminalPanel({ readOnly = true, setReadOnly = () => { }
             }
         });
 
-        // Data Listener (Input)
+        // Data Listener (Input from user keystrokes)
         term.onData(async (data) => {
             if (!useDatabaseStore.getState().isConnected) return;
             // Ignore ANSI sequences we handled in onKey
@@ -303,38 +312,31 @@ export default function TerminalPanel({ readOnly = true, setReadOnly = () => { }
                 const cur = inputBufferRef.current;
                 const pos = inputCursorRef.current;
                 if (pos > 0) {
-                    const params = cur.slice(0, pos - 1) + cur.slice(pos);
-                    // Optimized redraw: 
-                    // 1. Move left 1
-                    // 2. Clear line to right
-                    // 3. Print tail
-                    // 4. Move cursor back
-                    // Actually, let's just use the redraw helper for consistency, 
-                    // though it might flicker if heavy. For local echo, it's fine.
-                    // But wait: redrawLine moves cursor relative to OLD inputCursorRef.
-                    // We must be careful.
-
-                    // Manual Backspace Logic for smoothness:
-                    term.write('\b\x1b[K'); // Backspace + Clear Right
+                    term.write('\b\x1b[K');
                     const tail = cur.slice(pos);
                     term.write(tail);
-                    // Move back to new pos
                     if (tail.length > 0) term.write('\x1b[D'.repeat(tail.length));
 
-                    inputBufferRef.current = params;
+                    inputBufferRef.current = cur.slice(0, pos - 1) + cur.slice(pos);
                     inputCursorRef.current = pos - 1;
                 }
+            } else if (data === '\x03') {
+                // Ctrl+C — send interrupt to PTY
+                sendToPty('\x03');
+                inputBufferRef.current = '';
+                inputCursorRef.current = 0;
+                multilineBufferRef.current = '';
+                isExecutingRef.current = false;
+                setIsExecuting(false);
             } else if (data.charCodeAt(0) >= 32) {
-                // Printable
+                // Printable character
                 const cur = inputBufferRef.current;
                 const pos = inputCursorRef.current;
 
                 const newVal = cur.slice(0, pos) + data + cur.slice(pos);
 
-                // Print char
                 term.write(data);
 
-                // If inserting in middle, print tail and reset cursor
                 const tail = cur.slice(pos);
                 if (tail.length > 0) {
                     term.write(tail);
@@ -346,7 +348,7 @@ export default function TerminalPanel({ readOnly = true, setReadOnly = () => { }
             }
         });
 
-        // Output Listener (Sync)
+        // Output Listener (data coming FROM the PTY)
         const unlisten = listen('terminal-output', (event: any) => {
             const [id, data] = event.payload;
             if (id === 'term-1') {
@@ -355,6 +357,18 @@ export default function TerminalPanel({ readOnly = true, setReadOnly = () => { }
                 if (typeof data === 'string') {
                     const cleanData = data.trim();
 
+                    // Detect prompt = execution finished
+                    const ct = useDatabaseStore.getState().connectionType;
+                    const promptPattern = ct && PROMPT_PATTERNS[ct] ? PROMPT_PATTERNS[ct] : /[>=#]\s*$/;
+
+                    if (promptPattern.test(data)) {
+                        if (isExecutingRef.current) {
+                            isExecutingRef.current = false;
+                            setIsExecuting(false);
+                        }
+                    }
+
+                    // Detect DB/table changes from PTY output
                     if (data.includes("Query OK")) {
                         if (pendingActionRef.current?.type === 'DB_REFRESH') refreshDatabases();
                         if (pendingActionRef.current?.type === 'TABLE_REFRESH') refreshTables();
@@ -375,18 +389,44 @@ export default function TerminalPanel({ readOnly = true, setReadOnly = () => { }
                         }
                     } else if (data.includes("ERROR") || data.includes("fatal:")) {
                         pendingActionRef.current = null;
+                        if (isExecutingRef.current) {
+                            isExecutingRef.current = false;
+                            setIsExecuting(false);
+                        }
                     }
                 }
             }
         });
 
+        // Terminal Exit Listener — PTY process died
+        const unlistenExit = listen('terminal-exit', (event: any) => {
+            const id = event.payload;
+            if (id === 'term-1') {
+                term.write('\r\n\x1b[31m[Terminal] Session ended. Reconnect to restart.\x1b[0m\r\n');
+                term.options.disableStdin = true;
+                isExecutingRef.current = false;
+                setIsExecuting(false);
+            }
+        });
+
         // Resize Observer
         const resizeObserver = new ResizeObserver(() => {
+            // Track focus state before resize
+            wasFocusedRef.current = document.activeElement === term.textarea;
+
             requestAnimationFrame(() => {
-                fitAddon.fit();
-                const dims = fitAddon.proposeDimensions();
-                if (dims && useDatabaseStore.getState().isConnected) {
-                    invoke('resize_terminal', { id: 'term-1', rows: dims.rows, cols: dims.cols });
+                try {
+                    fitAddon.fit();
+                    const dims = fitAddon.proposeDimensions();
+                    if (dims && useDatabaseStore.getState().isConnected) {
+                        invoke('resize_terminal', { id: 'term-1', rows: dims.rows, cols: dims.cols });
+                    }
+                    // Restore focus if it was focused before resize
+                    if (wasFocusedRef.current) {
+                        term.focus();
+                    }
+                } catch (e) {
+                    // Ignore fit errors during rapid resizing
                 }
             });
         });
@@ -396,6 +436,7 @@ export default function TerminalPanel({ readOnly = true, setReadOnly = () => { }
             term.dispose();
             resizeObserver.disconnect();
             unlisten.then(f => f());
+            unlistenExit.then(f => f());
         };
     }, []);
 
@@ -461,11 +502,17 @@ export default function TerminalPanel({ readOnly = true, setReadOnly = () => { }
         }
     }, [isConnected, activeDatabase, connectionType, connectionStatus]);
 
-    // Safety Effect
+    // Safety Effect (connection status changes)
     useEffect(() => {
         if (xtermRef.current) {
             if (connectionStatus === 'DISCONNECTED') {
                 lastSyncedDbRef.current = null;
+                multilineBufferRef.current = '';
+                inputBufferRef.current = '';
+                inputCursorRef.current = 0;
+                isExecutingRef.current = false;
+                setIsExecuting(false);
+
                 xtermRef.current.clear();
                 xtermRef.current.write('\x1b[2J\x1b[3J\x1b[H');
                 xtermRef.current.write('\r\n\x1b[90m[Disconnected] No active session.\x1b[0m\r\n');
@@ -482,8 +529,26 @@ export default function TerminalPanel({ readOnly = true, setReadOnly = () => { }
         }
     }, [connectionStatus]);
 
+    // Focus Effect — re-focus terminal when panel becomes visible
+    useEffect(() => {
+        if (isVisible && xtermRef.current && connectionStatus === 'ACTIVE') {
+            // Small delay to allow DOM to settle after panel toggle
+            const timer = setTimeout(() => {
+                xtermRef.current?.focus();
+            }, 50);
+            return () => clearTimeout(timer);
+        }
+    }, [isVisible, connectionStatus]);
+
+    // Click-to-focus handler
+    const handleContainerClick = useCallback(() => {
+        if (xtermRef.current && connectionStatus === 'ACTIVE') {
+            xtermRef.current.focus();
+        }
+    }, [connectionStatus]);
+
     return (
-        <div className="h-full w-full flex flex-col bg-[#1e1e1e] text-white relative">
+        <div className="h-full w-full flex flex-col bg-[#1e1e1e] text-white relative" onClick={handleContainerClick}>
             {/* Terminal Container - Full Height */}
             <div className="flex-1 relative bg-[#1e1e1e]">
                 {/* Xterm Instance */}
@@ -506,13 +571,21 @@ export default function TerminalPanel({ readOnly = true, setReadOnly = () => { }
                     </div>
                 )}
 
-                {/* Connection Badge - Floating Top-Left when connected */}
-                {isConnected && activeDatabase && (
-                    <div className="absolute top-3 left-3 z-20 pointer-events-none">
-                        <div className="flex items-center gap-1.5 px-2.5 py-1 bg-[#252526]/90 backdrop-blur-sm rounded text-[10px] text-blue-400 border border-[#3e3e3e] shadow-lg">
-                            <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>
-                            <span className="font-medium">{activeDatabase}</span>
-                        </div>
+                {/* Connection Badge + Executing Indicator — Floating Top-Left when connected */}
+                {isConnected && (
+                    <div className="absolute top-3 left-3 z-20 pointer-events-none flex items-center gap-2">
+                        {activeDatabase && (
+                            <div className="flex items-center gap-1.5 px-2.5 py-1 bg-[#252526]/90 backdrop-blur-sm rounded text-[10px] text-blue-400 border border-[#3e3e3e] shadow-lg">
+                                <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>
+                                <span className="font-medium">{activeDatabase}</span>
+                            </div>
+                        )}
+                        {isExecuting && (
+                            <div className="flex items-center gap-1.5 px-2.5 py-1 bg-[#252526]/90 backdrop-blur-sm rounded text-[10px] text-amber-400 border border-amber-900/30 shadow-lg">
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                                <span className="font-medium">Executing...</span>
+                            </div>
+                        )}
                     </div>
                 )}
             </div>
@@ -541,7 +614,12 @@ export default function TerminalPanel({ readOnly = true, setReadOnly = () => { }
                             <div className="flex justify-end gap-2 pt-2">
                                 <button
                                     className="px-3 py-1.5 rounded text-xs font-medium text-gray-400 hover:text-white hover:bg-[#3e3e3e] transition-colors"
-                                    onClick={() => setShowConfirm(false)}
+                                    onClick={() => {
+                                        setShowConfirm(false);
+                                        setPendingCommand(null);
+                                        // Send a blank enter to re-show prompt
+                                        sendToPty('\r');
+                                    }}
                                 >
                                     Cancel
                                 </button>
@@ -559,3 +637,5 @@ export default function TerminalPanel({ readOnly = true, setReadOnly = () => { }
         </div>
     );
 }
+
+export default memo(TerminalPanelInner);

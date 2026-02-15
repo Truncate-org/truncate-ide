@@ -165,7 +165,7 @@ const ResizableLayout: React.FC = () => {
                                     </div>
                                     {/* Scrollable Content */}
                                     <div className="flex-1 overflow-auto">
-                                        <TerminalPanel readOnly={terminalReadOnly} setReadOnly={setTerminalReadOnly} />
+                                        <TerminalPanel readOnly={terminalReadOnly} setReadOnly={setTerminalReadOnly} isVisible={showTerminal} />
                                     </div>
                                 </Panel>
                             )}

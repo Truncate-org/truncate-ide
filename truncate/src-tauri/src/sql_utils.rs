@@ -1,4 +1,4 @@
-use sqlparser::dialect::GenericDialect;
+use sqlparser::dialect::{GenericDialect, MySqlDialect};
 use sqlparser::parser::Parser;
 use sqlparser::ast::Statement;
 
@@ -16,16 +16,38 @@ pub enum SqlType {
 }
 
 pub fn get_last_statement(sql: &str) -> Option<String> {
-    let dialect = GenericDialect {};
-    // Use explicit type to fix E0282
-    let ast: Vec<Statement> = Parser::parse_sql(&dialect, sql).ok()?;
-    
-    if ast.is_empty() {
+    let trimmed = sql.trim();
+    if trimmed.is_empty() {
         return None;
     }
-    
-    // Simple approach: return the input if it's a single valid statement
-    Some(sql.to_string())
+
+    // Try MySQL dialect first (handles backticks), then Generic
+    let dialects: Vec<Box<dyn sqlparser::dialect::Dialect>> = vec![
+        Box::new(MySqlDialect {}),
+        Box::new(GenericDialect {}),
+    ];
+
+    for dialect in &dialects {
+        if let Ok(ast) = Parser::parse_sql(dialect.as_ref(), trimmed) {
+            if !ast.is_empty() {
+                return Some(trimmed.to_string());
+            }
+        }
+    }
+
+    // Fallback: if the SQL starts with a known keyword, return it as-is
+    // This handles edge cases where neither dialect can parse but the SQL is valid
+    let upper = trimmed.to_uppercase();
+    if upper.starts_with("SELECT ") || upper.starts_with("CREATE ") ||
+       upper.starts_with("INSERT ") || upper.starts_with("UPDATE ") ||
+       upper.starts_with("DELETE ") || upper.starts_with("DROP ") ||
+       upper.starts_with("ALTER ") || upper.starts_with("USE ") ||
+       upper.starts_with("SHOW ")
+    {
+        return Some(trimmed.to_string());
+    }
+
+    None
 }
 
 pub fn get_sql_type(sql: &str) -> SqlType {
@@ -35,26 +57,40 @@ pub fn get_sql_type(sql: &str) -> SqlType {
         return SqlType::Use;
     }
 
-    let dialect = GenericDialect {};
-    let ast: Vec<Statement> = match Parser::parse_sql(&dialect, sql) {
-        Ok(ast) => ast,
-        Err(_) => return SqlType::Other,
-    };
+    // Try MySQL dialect first, then Generic
+    let dialects: Vec<Box<dyn sqlparser::dialect::Dialect>> = vec![
+        Box::new(MySqlDialect {}),
+        Box::new(GenericDialect {}),
+    ];
 
-    if let Some(stmt) = ast.last() {
-        match stmt {
-            Statement::Query(_) => SqlType::Select,
-            Statement::CreateTable { .. } => SqlType::Create,
-            Statement::Drop { .. } => SqlType::Drop,
-            Statement::AlterTable { .. } => SqlType::Alter,
-            Statement::Insert { .. } => SqlType::Insert,
-            Statement::Update { .. } => SqlType::Update,
-            Statement::Delete { .. } => SqlType::Delete,
-            _ => SqlType::Other,
+    for dialect in &dialects {
+        if let Ok(ast) = Parser::parse_sql(dialect.as_ref(), sql) {
+            if let Some(stmt) = ast.last() {
+                return match stmt {
+                    Statement::Query(_) => SqlType::Select,
+                    Statement::CreateTable { .. } => SqlType::Create,
+                    Statement::CreateDatabase { .. } => SqlType::Create,
+                    Statement::Drop { .. } => SqlType::Drop,
+                    Statement::AlterTable { .. } => SqlType::Alter,
+                    Statement::Insert { .. } => SqlType::Insert,
+                    Statement::Update { .. } => SqlType::Update,
+                    Statement::Delete { .. } => SqlType::Delete,
+                    _ => SqlType::Other,
+                };
+            }
         }
-    } else {
-        SqlType::Other
     }
+
+    // Keyword-based fallback
+    let upper = trimmed.to_uppercase();
+    if upper.starts_with("SELECT ") { SqlType::Select }
+    else if upper.starts_with("CREATE ") { SqlType::Create }
+    else if upper.starts_with("DROP ") { SqlType::Drop }
+    else if upper.starts_with("ALTER ") { SqlType::Alter }
+    else if upper.starts_with("INSERT ") { SqlType::Insert }
+    else if upper.starts_with("UPDATE ") { SqlType::Update }
+    else if upper.starts_with("DELETE ") { SqlType::Delete }
+    else { SqlType::Other }
 }
 
 pub fn is_safe_for_mvp(sql_type: &SqlType) -> bool {

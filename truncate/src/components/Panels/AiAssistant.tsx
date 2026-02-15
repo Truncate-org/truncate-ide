@@ -54,13 +54,56 @@ const AiAssistant: React.FC = () => {
 
             {/* Initialization Overlay */}
             {status !== 'online' && (
-                <div className="flex-1 flex flex-col items-center justify-center p-6 text-center space-y-4 bg-panel">
-                    <div className="w-8 h-8 rounded-full border-2 border-accent border-t-transparent animate-spin"></div>
-                    <div>
-                        <h3 className="text-primary font-medium">Starting Local AI...</h3>
-                        <p className="text-secondary text-xs mt-1">Launching Ollama sidecar. This may take a moment.</p>
-                        {modelStatus?.message && <p className="text-red-400 text-[10px] mt-2 bg-red-500/10 px-2 py-1 rounded">{modelStatus.message}</p>}
+                <div className="flex-1 flex flex-col items-center justify-center p-6 text-center space-y-5 bg-panel">
+                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-indigo-500/30 flex items-center justify-center">
+                        <div className="w-5 h-5 rounded-full border-2 border-accent border-t-transparent animate-spin"></div>
                     </div>
+                    <div className="space-y-2 max-w-xs">
+                        <h3 className="text-primary font-semibold text-sm">AI Assistant Offline</h3>
+                        <p className="text-secondary text-xs leading-relaxed">
+                            Truncate AI requires <span className="text-accent font-medium">Ollama</span> running locally with <span className="text-accent font-medium">qwen2.5-coder</span> model.
+                        </p>
+                    </div>
+
+                    {/* Setup Steps */}
+                    <div className="text-left w-full max-w-xs space-y-2">
+                        <div className="flex items-start gap-2.5 p-2.5 rounded-lg bg-subtle/20 border border-subtle/30">
+                            <span className="text-[10px] font-bold text-accent bg-accent/10 rounded w-4 h-4 flex items-center justify-center shrink-0 mt-0.5">1</span>
+                            <div>
+                                <p className="text-xs text-primary font-medium">Install Ollama</p>
+                                <p className="text-[10px] text-secondary mt-0.5">
+                                    <a href="https://ollama.com" target="_blank" rel="noreferrer" className="text-accent hover:underline">ollama.com</a> → Download & Install
+                                </p>
+                            </div>
+                        </div>
+                        <div className="flex items-start gap-2.5 p-2.5 rounded-lg bg-subtle/20 border border-subtle/30">
+                            <span className="text-[10px] font-bold text-accent bg-accent/10 rounded w-4 h-4 flex items-center justify-center shrink-0 mt-0.5">2</span>
+                            <div>
+                                <p className="text-xs text-primary font-medium">Pull the model</p>
+                                <code className="text-[10px] text-green-400 bg-black/30 px-1.5 py-0.5 rounded mt-1 block">ollama pull qwen2.5-coder</code>
+                            </div>
+                        </div>
+                        <div className="flex items-start gap-2.5 p-2.5 rounded-lg bg-subtle/20 border border-subtle/30">
+                            <span className="text-[10px] font-bold text-accent bg-accent/10 rounded w-4 h-4 flex items-center justify-center shrink-0 mt-0.5">3</span>
+                            <div>
+                                <p className="text-xs text-primary font-medium">Ensure Ollama is running</p>
+                                <code className="text-[10px] text-green-400 bg-black/30 px-1.5 py-0.5 rounded mt-1 block">ollama serve</code>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Error + Retry */}
+                    {modelStatus?.message && (
+                        <div className="w-full max-w-xs">
+                            <p className="text-red-400 text-[10px] bg-red-500/10 px-3 py-1.5 rounded border border-red-500/20 truncate">{modelStatus.message}</p>
+                        </div>
+                    )}
+                    <button
+                        onClick={() => checkStatus()}
+                        className="px-4 py-1.5 text-xs font-medium text-accent border border-accent/30 rounded-lg hover:bg-accent/10 transition-colors"
+                    >
+                        ↻ Retry Connection
+                    </button>
                 </div>
             )}
 
