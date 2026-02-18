@@ -98,6 +98,19 @@ const TopBar: React.FC = () => {
                 <div className="h-4 w-[1px] bg-[#3e3e3e] mx-1" />
 
                 <button
+                    onClick={useUiStore(s => s.toggleTheme)}
+                    className="text-secondary hover:text-white p-1.5 rounded hover:bg-[#2d2d2d] transition-colors"
+                    title="Toggle Theme (Void Minimal)"
+                >
+                    {/* Dynamic Icon based on theme? Or just a static icon for the toggle? */}
+                    {/* Let's use a Zap icon to represent 'Power Mode' / 'Void' */}
+                    <Settings className="w-4 h-4 hidden" /> {/* Keeping structure, but using Zap below */}
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                    </svg>
+                </button>
+
+                <button
                     onClick={resetLayout}
                     className="text-secondary hover:text-white p-1.5 rounded hover:bg-[#2d2d2d] transition-colors"
                     title="Reset Layout"

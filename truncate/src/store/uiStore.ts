@@ -8,6 +8,9 @@ interface UiStore {
     showTerminal: boolean;
     showAssistant: boolean;
 
+    // Theme
+    theme: 'default' | 'void-minimal';
+
     // Panel Sizes (in pixels)
     explorerLastSize: number;
     terminalLastSize: number;
@@ -18,6 +21,7 @@ interface UiStore {
     togglePreview: () => void;
     toggleTerminal: () => void;
     toggleAssistant: () => void;
+    toggleTheme: () => void;
     setExplorerSize: (size: number) => void;
     setTerminalSize: (size: number) => void;
     setAssistantSize: (size: number) => void;
@@ -31,6 +35,7 @@ export const useUiStore = create<UiStore>()(
             showPreview: true,
             showTerminal: true,
             showAssistant: true,
+            theme: 'default',
 
             // Default panel sizes in pixels
             explorerLastSize: 280,
@@ -41,6 +46,7 @@ export const useUiStore = create<UiStore>()(
             togglePreview: () => set((state) => ({ showPreview: !state.showPreview })),
             toggleTerminal: () => set((state) => ({ showTerminal: !state.showTerminal })),
             toggleAssistant: () => set((state) => ({ showAssistant: !state.showAssistant })),
+            toggleTheme: () => set((state) => ({ theme: state.theme === 'default' ? 'void-minimal' : 'default' })),
 
             setExplorerSize: (size: number) => set({ explorerLastSize: size }),
             setTerminalSize: (size: number) => set({ terminalLastSize: size }),

@@ -1,12 +1,34 @@
 @import "tailwindcss";
 
+@layer base {
+  :root {
+    /* GUI Default (GitHub Dark Dimmed style) */
+    --bg-app: #0E1117;
+    --bg-panel: #161B22;
+    --bg-subtle: #21262D;
+    --fg-primary: #E6EDF3;
+    --fg-secondary: #8B949E;
+    --fg-accent: #2F81F7;
+  }
+
+  :root[data-theme="void-minimal"] {
+    /* Void Minimal */
+    --bg-app: #0E0E10;       /* True Black */
+    --bg-panel: #18181B;     /* Graphite */
+    --bg-subtle: #27272A;    /* Gunmetal / Borders */
+    --fg-primary: #FAFAFA;   /* Ghost Text */
+    --fg-secondary: #A1A1AA; /* Zinc Gray */
+    --fg-accent: #FFFFFF;    /* Pure White */
+  }
+}
+
 @theme {
-  --color-app: #0E1117;
-  --color-panel: #161B22;
-  --color-subtle: #21262D;
-  --color-primary: #E6EDF3;
-  --color-secondary: #8B949E;
-  --color-accent: #2F81F7;
+  --color-app: var(--bg-app);
+  --color-panel: var(--bg-panel);
+  --color-subtle: var(--bg-subtle);
+  --color-primary: var(--fg-primary);
+  --color-secondary: var(--fg-secondary);
+  --color-accent: var(--fg-accent);
 }
 
 @layer base {
