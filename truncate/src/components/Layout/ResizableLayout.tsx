@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Panel, Group, Separator } from 'react-resizable-panels';
 import DatabaseExplorer from '../Panels/DatabaseExplorer.tsx';
 import DataResultsView from '../Panels/DataResultsView.tsx';
+import { DataAuditPanel } from '../Panels/DataAuditPanel.tsx';
 import TerminalPanel from '../Panels/TerminalPanel.tsx';
 import AiAssistant from '../Panels/AiAssistant.tsx';
 import StatusBar from '../StatusBar.tsx';
@@ -17,12 +18,14 @@ const ResizableLayout: React.FC = () => {
         showPreview,
         showTerminal,
         showAssistant,
+        showDataAudit,
         explorerLastSize,
         terminalLastSize,
         assistantLastSize,
         toggleExplorer,
         toggleTerminal,
         toggleAssistant,
+        toggleDataAudit,
         setExplorerSize,
         setTerminalSize,
         setAssistantSize,
@@ -60,6 +63,10 @@ const ResizableLayout: React.FC = () => {
 
     const handleCloseTerminal = () => {
         toggleTerminal();
+    };
+
+    const handleCloseDataAudit = () => {
+        toggleDataAudit();
     };
 
     return (
@@ -231,10 +238,40 @@ const ResizableLayout: React.FC = () => {
                             </Panel>
                         </>
                     )}
+
+                    {/* Right Panel: Data Audit */}
+                    {showDataAudit && (
+                        <>
+                            <Separator className="w-[6px] hover:w-[6px] bg-transparent hover:bg-accent/20 transition-colors cursor-col-resize" />
+                            <Panel
+                                defaultSize={30}
+                                minSize={20}
+                                maxSize={40}
+                                collapsible={false}
+                                className="bg-panel flex flex-col border-l border-subtle"
+                                id="data-audit-panel"
+                            >
+                                {/* Panel Header with Close Button */}
+                                <div className="flex items-center justify-between px-3 py-2 border-b border-subtle">
+                                    <span className="text-xs uppercase tracking-wide text-secondary font-semibold">
+                                        Data Audit
+                                    </span>
+                                    <button
+                                        onClick={handleCloseDataAudit}
+                                        className="p-1 hover:bg-subtle rounded transition-colors"
+                                        title="Close Data Audit"
+                                    >
+                                        <X className="w-4 h-4" />
+                                    </button>
+                                </div>
+                                <DataAuditPanel />
+                            </Panel>
+                        </>
+                    )}
                 </Group>
             </div>
             <StatusBar />
-        </div>
+        </div >
     );
 };
 

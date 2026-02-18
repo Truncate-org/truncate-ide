@@ -5,6 +5,7 @@ import {
     Bot,
     Table,
     Layout,
+    ShieldCheck,
 } from 'lucide-react';
 import { useUiStore } from '../../store/uiStore';
 import clsx from 'clsx';
@@ -16,6 +17,7 @@ const TopBar: React.FC = () => {
         showPreview, togglePreview,
         showTerminal, toggleTerminal,
         showAssistant, toggleAssistant,
+        showDataAudit, toggleDataAudit,
         resetLayout
     } = useUiStore();
 
@@ -85,6 +87,12 @@ const TopBar: React.FC = () => {
                         onClick={toggleAssistant}
                         icon={Bot}
                         label="AI Assistant"
+                    />
+                    <ToggleBtn
+                        active={showDataAudit}
+                        onClick={toggleDataAudit}
+                        icon={ShieldCheck}
+                        label="Data Audit"
                     />
                     <ToggleBtn
                         active={showTerminal}

@@ -7,6 +7,7 @@ interface UiStore {
     showPreview: boolean;
     showTerminal: boolean;
     showAssistant: boolean;
+    showDataAudit: boolean; // New Panel
 
     // Theme
     theme: 'default' | 'void-minimal';
@@ -21,6 +22,7 @@ interface UiStore {
     togglePreview: () => void;
     toggleTerminal: () => void;
     toggleAssistant: () => void;
+    toggleDataAudit: () => void; // New Action
     toggleTheme: () => void;
     setExplorerSize: (size: number) => void;
     setTerminalSize: (size: number) => void;
@@ -35,6 +37,7 @@ export const useUiStore = create<UiStore>()(
             showPreview: true,
             showTerminal: true,
             showAssistant: true,
+            showDataAudit: false, // Default hidden
             theme: 'default',
 
             // Default panel sizes in pixels
@@ -46,6 +49,7 @@ export const useUiStore = create<UiStore>()(
             togglePreview: () => set((state) => ({ showPreview: !state.showPreview })),
             toggleTerminal: () => set((state) => ({ showTerminal: !state.showTerminal })),
             toggleAssistant: () => set((state) => ({ showAssistant: !state.showAssistant })),
+            toggleDataAudit: () => set((state) => ({ showDataAudit: !state.showDataAudit })),
             toggleTheme: () => set((state) => ({ theme: state.theme === 'default' ? 'void-minimal' : 'default' })),
 
             setExplorerSize: (size: number) => set({ explorerLastSize: size }),
@@ -57,6 +61,7 @@ export const useUiStore = create<UiStore>()(
                 showPreview: true,
                 showTerminal: true,
                 showAssistant: true,
+                showDataAudit: false,
                 explorerLastSize: 280,
                 terminalLastSize: 200,
                 assistantLastSize: 320,
@@ -69,6 +74,7 @@ export const useUiStore = create<UiStore>()(
                 showPreview: state.showPreview,
                 showTerminal: state.showTerminal,
                 showAssistant: state.showAssistant,
+                showDataAudit: state.showDataAudit,
                 explorerLastSize: state.explorerLastSize,
                 terminalLastSize: state.terminalLastSize,
                 assistantLastSize: state.assistantLastSize,

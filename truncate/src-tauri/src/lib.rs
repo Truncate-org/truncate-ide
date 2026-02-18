@@ -13,6 +13,7 @@ pub mod sql_utils;
 pub mod schema;
 pub mod terminal;
 pub mod ai_copilot;
+pub mod data_profiling;
 
 
 use crate::db_state::DbState;
@@ -210,6 +211,17 @@ async fn drop_database(
     Ok(())
 }
 
+#[tauri::command]
+async fn run_data_profiling(
+    state: State<'_, DbState>,
+    table_name: String,
+) -> Result<crate::data_profiling::TableProfile, String> {
+    let guard = state.adapter.lock().await;
+    let adapter = guard.as_ref().ok_or("No active connection")?;
+    
+    crate::data_profiling::profile_table(adapter, &table_name).await
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -244,7 +256,9 @@ pub fn run() {
             refresh_databases,
             inspect_csv,
             ai_copilot::ask_copilot,
-            ai_copilot::check_ai_status
+            ai_copilot::check_ai_status,
+            ai_copilot::ask_audit_ai,
+            run_data_profiling
         ])
 
         .run(tauri::generate_context!())
