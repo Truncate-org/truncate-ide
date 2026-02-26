@@ -1,11 +1,15 @@
-use tauri::State;
-use serde::{Deserialize, Serialize};
+use crate::adapter::DatabaseAdapter;
 use crate::db_state::DbState;
 use crate::schema::Schema;
-use crate::adapter::DatabaseAdapter;
+use once_cell::sync::Lazy;
+use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::collections::HashMap;
 use std::sync::Mutex;
-use once_cell::sync::Lazy;
+use std::sync::Mutex;
+use tauri::State;
+use tauri::State;
 use tokio::task::AbortHandle;
 
 // -----------------------------------------------------------------------------
@@ -26,7 +30,10 @@ struct Message {
     content: String,
 }
 
-
+#[derive(Deserialize)]
+struct OllamaResponse {
+    message: Message,
+}
 
 // Global handle for the active AI request to allow cancellation
 static ACTIVE_REQUEST: Lazy<Mutex<Option<AbortHandle>>> = Lazy::new(|| Mutex::new(None));
@@ -49,13 +56,15 @@ fn build_schema_context(schema: &Schema, db_type: &str) -> String {
     context.push_str("TABLES:\n");
 
     for table in &schema.tables {
-        let cols: Vec<String> = table.columns.iter()
+        let cols: Vec<String> = table
+            .columns
+            .iter()
             .map(|c| format!("{} {}", c.name, c.data_type))
             .collect();
         context.push_str(&format!("- {}({})\n", table.name, cols.join(", ")));
     }
     context.push_str("================================\n");
-    
+
     context
 }
 
@@ -64,23 +73,34 @@ fn build_schema_context(schema: &Schema, db_type: &str) -> String {
 // -----------------------------------------------------------------------------
 
 #[derive(Deserialize)]
-struct OllamaModel { name: String }
+struct OllamaModel {
+    name: String,
+}
 #[derive(Deserialize)]
-struct OllamaTags { models: Vec<OllamaModel> }
+struct OllamaTags {
+    models: Vec<OllamaModel>,
+}
 
 async fn resolve_model_name() -> Result<String, String> {
     let client = reqwest::Client::new();
     // Short implementation of dynamic model logic
-    let res = client.get("http://127.0.0.1:11434/api/tags").send().await
+    let res = client
+        .get("http://127.0.0.1:11434/api/tags")
+        .send()
+        .await
         .map_err(|e| format!("Ollama connection failed: {}. Is Ollama running?", e))?;
-    
-    if !res.status().is_success() { return Err("Ollama offline".to_string()); }
-    
+
+    if !res.status().is_success() {
+        return Err("Ollama offline".to_string());
+    }
     let tags: OllamaTags = res.json().await.map_err(|e| e.to_string())?;
     let all_models: Vec<String> = tags.models.into_iter().map(|m| m.name).collect();
 
     if all_models.is_empty() {
-        return Err("No models found in Ollama. Please run 'ollama pull qwen2.5-coder' or any other model.".to_string());
+        return Err(
+            "No models found in Ollama. Please run 'ollama pull qwen2.5-coder' or any other model."
+                .to_string(),
+        );
     }
 
     // 1. Preferred: qwen2.5-coder
@@ -120,11 +140,15 @@ async fn resolve_model_name() -> Result<String, String> {
 pub async fn check_ai_status() -> Result<crate::ai_copilot::AiStatus, String> {
     match resolve_model_name().await {
         Ok(name) => Ok(crate::ai_copilot::AiStatus {
-            online: true, model_loaded: true, message: format!("Ready ({})", name)
+            online: true,
+            model_loaded: true,
+            message: format!("Ready ({})", name),
         }),
         Err(e) => Ok(crate::ai_copilot::AiStatus {
-            online: false, model_loaded: false, message: e
-        })
+            online: false,
+            model_loaded: false,
+            message: e,
+        }),
     }
 }
 
@@ -163,12 +187,18 @@ pub async fn ask_copilot(
     let (schema, db_type) = {
         let guard = state.adapter.lock().await;
         let adapter = guard.as_ref().ok_or("No active DB")?;
-        let db_name = adapter.get_current_database().await.map_err(|e| e.to_string())?;
-        let s = adapter.extract_schema(&db_name).await.map_err(|e| e.to_string())?;
-        let t = format!("{:?}", adapter.get_connection_config().db_type); 
+        let db_name = adapter
+            .get_current_database()
+            .await
+            .map_err(|e| e.to_string())?;
+        let s = adapter
+            .extract_schema(&db_name)
+            .await
+            .map_err(|e| e.to_string())?;
+        let t = format!("{:?}", adapter.get_connection_config().db_type);
         (s, t)
     };
-    
+
     let model_name = resolve_model_name().await?;
     let schema_ctx = build_schema_context(&schema, &db_type);
     let full_system = format!("{}\n\n{}", SYSTEM_PROMPT, schema_ctx);
@@ -178,17 +208,14 @@ pub async fn ask_copilot(
 
     match res {
         Ok(response_text) => Ok(response_text),
-        Err(e) => Err(e)
+        Err(e) => Err(e),
     }
 }
 
 const AUDIT_SYSTEM_PROMPT: &str = include_str!("../context/Audit_AI_context.md");
 
 #[tauri::command]
-pub async fn ask_audit_ai(
-    app: tauri::AppHandle,
-    profile_json: String, 
-) -> Result<String, String> {
+pub async fn ask_audit_ai(app: tauri::AppHandle, profile_json: String) -> Result<String, String> {
     // 1. Cancel previous if any
     {
         let mut handle_lock = ACTIVE_REQUEST.lock().unwrap();
@@ -199,20 +226,23 @@ pub async fn ask_audit_ai(
 
     let model_name = resolve_model_name().await?;
     let full_system = AUDIT_SYSTEM_PROMPT.to_string();
-    let prompt = format!("Here is the data profile JSON:\n```json\n{}\n```\n\nAnalyze and suggest cleaning steps.", profile_json);
+    let prompt = format!(
+        "Here is the data profile JSON:\n```json\n{}\n```\n\nAnalyze and suggest cleaning steps.",
+        profile_json
+    );
 
     let res = query_ollama(&app, full_system, prompt, model_name).await;
     match res {
         Ok(response_text) => Ok(response_text),
-        Err(e) => Err(e)
+        Err(e) => Err(e),
     }
 }
 
 async fn query_ollama(
-    _app: &tauri::AppHandle, 
-    system: String, 
-    prompt: String, 
-    model: String
+    _app: &tauri::AppHandle,
+    system: String,
+    prompt: String,
+    model: String,
 ) -> Result<String, String> {
     let client = reqwest::Client::new();
     let url = "http://127.0.0.1:11434/api/chat";
@@ -222,28 +252,41 @@ async fn query_ollama(
     options.insert("num_predict".to_string(), serde_json::json!(1024));
 
     let messages = vec![
-        Message { role: "system".to_string(), content: system },
-        Message { role: "user".to_string(), content: prompt },
+        Message {
+            role: "system".to_string(),
+            content: system,
+        },
+        Message {
+            role: "user".to_string(),
+            content: prompt,
+        },
     ];
 
     let request = OllamaRequest {
-        model, messages, stream: false, options
+        model,
+        messages,
+        stream: false,
+        options,
     };
 
-    let res = client.post(url).json(&request).send().await
+    let res = client
+        .post(url)
+        .json(&request)
+        .send()
+        .await
         .map_err(|e| format!("Request failed: {}. Is Ollama running?", e))?;
 
     if !res.status().is_success() {
         return Err(format!("Ollama API Error: {}", res.status()));
     }
 
-    let body: serde_json::Value = res.json().await
+    let body: OllamaResponse = res
+        .json()
+        .await
         .map_err(|e| format!("Parse error: {}", e))?;
 
     // Extract message content
-    let content = body["message"]["content"].as_str()
-        .ok_or("Invalid response format")?
-        .to_string();
+    let content = body.message.content;
 
     Ok(content)
 }
@@ -256,15 +299,17 @@ use tauri_plugin_shell::ShellExt;
 
 static OLLAMA_RUNNING: AtomicBool = AtomicBool::new(false);
 pub fn start_ollama(app: &tauri::AppHandle) {
-    if OLLAMA_RUNNING.load(Ordering::Relaxed) { return; }
-    
+    if OLLAMA_RUNNING.load(Ordering::Relaxed) {
+        return;
+    }
+
     // Try to spawn sidecar, but don't panic if it fails (user might have system ollama)
     if let Ok(sidecar) = app.shell().sidecar("ollama") {
         if let Ok(_) = sidecar.args(["serve"]).spawn() {
             println!("Ollama sidecar started.");
             OLLAMA_RUNNING.store(true, Ordering::Relaxed);
         } else {
-             println!("Failed to spawn Ollama sidecar. Assuming system Ollama or manual start.");
+            println!("Failed to spawn Ollama sidecar. Assuming system Ollama or manual start.");
         }
     } else {
         println!("Ollama sidecar binary not found. Assuming system Ollama or manual start.");
@@ -272,4 +317,3 @@ pub fn start_ollama(app: &tauri::AppHandle) {
 }
 
 pub fn stop_ollama(_app: &tauri::AppHandle) {} // Sidecar dies with parent
-

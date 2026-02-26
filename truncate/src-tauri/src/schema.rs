@@ -1,4 +1,4 @@
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 use std::fs;
 use std::path::PathBuf;
@@ -18,8 +18,6 @@ pub struct Table {
     pub primary_keys: Vec<String>,
 }
 
-
-
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Column {
     pub name: String,
@@ -35,8 +33,6 @@ pub struct ForeignKey {
     pub ref_column: String,
 }
 
-
-
 pub fn generate_dot(schema: &Schema) -> String {
     let mut dot = String::from("digraph DatabaseSchema {\n");
     dot.push_str("    rankdir=LR;\n");
@@ -44,16 +40,25 @@ pub fn generate_dot(schema: &Schema) -> String {
     dot.push_str("    nodesep=0.5;\n");
 
     for table in &schema.tables {
-        dot.push_str(&format!("    {0} [label=<<TABLE BORDER=\"0\" CELLBORDER=\"1\" CELLSPACING=\"0\">\n", table.name));
-        dot.push_str(&format!("        <TR><TD BGCOLOR=\"#DDDDDD\"><B>{}</B></TD></TR>\n", table.name));
-        
+        dot.push_str(&format!(
+            "    {0} [label=<<TABLE BORDER=\"0\" CELLBORDER=\"1\" CELLSPACING=\"0\">\n",
+            table.name
+        ));
+        dot.push_str(&format!(
+            "        <TR><TD BGCOLOR=\"#DDDDDD\"><B>{}</B></TD></TR>\n",
+            table.name
+        ));
+
         for col in &table.columns {
             let key_marker = match &col.key_type {
                 Some(k) if k == "PRI" => " (PK)",
                 Some(k) if k == "MUL" => " (FK)",
                 _ => "",
             };
-            dot.push_str(&format!("        <TR><TD ALIGN=\"LEFT\">{}{} : {}</TD></TR>\n", col.name, key_marker, col.data_type));
+            dot.push_str(&format!(
+                "        <TR><TD ALIGN=\"LEFT\">{}{} : {}</TD></TR>\n",
+                col.name, key_marker, col.data_type
+            ));
         }
         dot.push_str("    </TABLE>>];\n");
 
@@ -71,7 +76,7 @@ pub fn generate_markdown_summary(schema: &Schema) -> String {
     md.push_str(&format!("# Database Schema: {}\n\n", schema.database_name));
     md.push_str("## Overview\n");
     md.push_str(&format!("- **Total Tables**: {}\n", schema.tables.len()));
-    
+
     md.push_str("\n## Tables\n");
     for table in &schema.tables {
         md.push_str(&format!("### {}\n", table.name));
@@ -79,23 +84,29 @@ pub fn generate_markdown_summary(schema: &Schema) -> String {
         md.push_str("|---|---|---|---|\n");
         for col in &table.columns {
             let key = col.key_type.as_deref().unwrap_or("");
-            md.push_str(&format!("| {} | {} | {} | {} |\n", col.name, col.data_type, col.is_nullable, key));
+            md.push_str(&format!(
+                "| {} | {} | {} | {} |\n",
+                col.name, col.data_type, col.is_nullable, key
+            ));
         }
         md.push_str("\n");
-        
+
         if !table.foreign_keys.is_empty() {
             md.push_str("**Foreign Keys**:\n");
             for fk in &table.foreign_keys {
-                md.push_str(&format!("- `{}` -> `{}.{}`\n", fk.column_name, fk.ref_table, fk.ref_column));
+                md.push_str(&format!(
+                    "- `{}` -> `{}.{}`\n",
+                    fk.column_name, fk.ref_table, fk.ref_column
+                ));
             }
             md.push_str("\n");
         }
     }
-    
+
     md.push_str("\n## AI Analysis Request\n");
     md.push_str("To get an AI explanation of this database, copy the content above and ask:\n");
     md.push_str("> \"Analyze this database schema. Explain the relationships, identify the core domains, and suggest potential optimizations or missing indexes.\"\n");
-    
+
     md
 }
 
@@ -110,9 +121,11 @@ pub struct ExportResult {
     pub message: String,
 }
 
-
-
-pub fn save_schema_files(schema: &Schema, base_path: &PathBuf, app_handle: &tauri::AppHandle) -> Result<ExportResult, String> {
+pub fn save_schema_files(
+    schema: &Schema,
+    base_path: &PathBuf,
+    app_handle: &tauri::AppHandle,
+) -> Result<ExportResult, String> {
     // Create a subdirectory for the export
     let folder_name = format!("Truncate_Export_{}", schema.database_name);
     let mut export_dir = base_path.clone();
@@ -125,10 +138,10 @@ pub fn save_schema_files(schema: &Schema, base_path: &PathBuf, app_handle: &taur
 
     let json_content = serde_json::to_string_pretty(schema)
         .map_err(|e| format!("Failed to serialize schema: {}", e))?;
-    
+
     let dot_content = generate_dot(schema);
     let md_content = generate_markdown_summary(schema);
-    
+
     let mut json_path = export_dir.clone();
     json_path.push(format!("{}_schema.json", schema.database_name));
 
@@ -137,36 +150,44 @@ pub fn save_schema_files(schema: &Schema, base_path: &PathBuf, app_handle: &taur
 
     let mut md_path = export_dir.clone();
     md_path.push(format!("{}_doc.md", schema.database_name));
-    
-    fs::write(&json_path, json_content)
-        .map_err(|e| format!("Failed to write JSON: {}", e))?;
-        
-    fs::write(&dot_path, &dot_content)
-        .map_err(|e| format!("Failed to write DOT: {}", e))?;
 
-    fs::write(&md_path, &md_content)
-        .map_err(|e| format!("Failed to write Markdown: {}", e))?;
+    fs::write(&json_path, json_content).map_err(|e| format!("Failed to write JSON: {}", e))?;
+
+    fs::write(&dot_path, &dot_content).map_err(|e| format!("Failed to write DOT: {}", e))?;
+
+    fs::write(&md_path, &md_content).map_err(|e| format!("Failed to write Markdown: {}", e))?;
 
     // Attempt SVG generation using Bundled Resource
     let mut svg_path_buf = export_dir.clone();
     svg_path_buf.push(format!("{}_diagram.svg", schema.database_name));
     let svg_path_str = svg_path_buf.to_string_lossy().to_string();
-    
+
     // Resolve resource path
     use tauri::path::BaseDirectory;
     use tauri::Manager;
 
-    let dot_resource_path = app_handle.path().resolve("bin/dot-aarch64-apple-darwin", BaseDirectory::Resource);
-    
+    let dot_binary_name = if cfg!(target_os = "macos") {
+        "bin/dot-aarch64-apple-darwin"
+    } else if cfg!(target_os = "linux") {
+        "bin/dot-unknown-linux-gnu"
+    } else {
+        // Fallback or error - maybe windows needs .exe?
+        "bin/dot"
+    };
+
+    let dot_resource_path = app_handle
+        .path()
+        .resolve(dot_binary_name, BaseDirectory::Resource);
+
     let svg_generated = match dot_resource_path {
         Ok(path) => {
-             // Ensure it is executable? It should be if we chmod-ed it before build.
-             Command::new(path)
+            // Ensure it is executable? It should be if we chmod-ed it before build.
+            Command::new(path)
                 .args(["-Tsvg", &dot_path.to_string_lossy(), "-o", &svg_path_str])
                 .output()
                 .map(|o| o.status.success())
                 .unwrap_or(false)
-        },
+        }
         Err(e) => {
             eprintln!("Failed to resolve dot binary: {}", e);
             false
@@ -177,13 +198,20 @@ pub fn save_schema_files(schema: &Schema, base_path: &PathBuf, app_handle: &taur
         success: true,
         json_path: json_path.to_string_lossy().to_string(),
         dot_path: dot_path.to_string_lossy().to_string(),
-        svg_path: if svg_generated { Some(svg_path_str) } else { None },
+        svg_path: if svg_generated {
+            Some(svg_path_str)
+        } else {
+            None
+        },
         markdown_path: md_path.to_string_lossy().to_string(),
         export_dir: export_dir.to_string_lossy().to_string(),
-        message: if svg_generated { 
-            format!("Exported to: {}", export_dir.to_string_lossy()) 
-        } else { 
-            format!("Exported to: {} (Bundled Graphviz failed)", export_dir.to_string_lossy()) 
+        message: if svg_generated {
+            format!("Exported to: {}", export_dir.to_string_lossy())
+        } else {
+            format!(
+                "Exported to: {} (Bundled Graphviz failed)",
+                export_dir.to_string_lossy()
+            )
         },
     })
 }
