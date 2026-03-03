@@ -2,23 +2,23 @@
 
 @layer base {
   :root {
-    /* GUI Default (GitHub Dark Dimmed style) */
-    --bg-app: #0E1117;
-    --bg-panel: #161B22;
-    --bg-subtle: #21262D;
-    --fg-primary: #E6EDF3;
-    --fg-secondary: #8B949E;
-    --fg-accent: #2F81F7;
+    /* GUI Default (VS Code Dark+ style) */
+    --bg-app: #1e1e1e;       /* Main editor background */
+    --bg-panel: #252526;     /* Sidebar / Panel background */
+    --bg-subtle: #333333;    /* Borders / Activity Bar */
+    --fg-primary: #cccccc;   /* Standard text */
+    --fg-secondary: #858585; /* Muted text / descriptions */
+    --fg-accent: #007acc;    /* VS Code Blue */
   }
 
   :root[data-theme="void-minimal"] {
-    /* Void Minimal */
-    --bg-app: #0E0E10;       /* True Black */
-    --bg-panel: #18181B;     /* Graphite */
-    --bg-subtle: #27272A;    /* Gunmetal / Borders */
-    --fg-primary: #FAFAFA;   /* Ghost Text */
-    --fg-secondary: #A1A1AA; /* Zinc Gray */
-    --fg-accent: #FFFFFF;    /* Pure White */
+    /* Void Minimal (Higher contrast, true blacks) */
+    --bg-app: #000000;       
+    --bg-panel: #0d0d0d;     
+    --bg-subtle: #222222;    
+    --fg-primary: #ffffff;   
+    --fg-secondary: #a3a3a3; 
+    --fg-accent: #ffffff;    
   }
 }
 

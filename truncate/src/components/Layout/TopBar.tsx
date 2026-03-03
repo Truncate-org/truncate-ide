@@ -40,10 +40,10 @@ const TopBar: React.FC = () => {
         <button
             onClick={onClick}
             className={clsx(
-                "p-1.5 rounded-md transition-all duration-200 group relative flex items-center justify-center",
+                "p-1.5 rounded transition-all duration-150 group relative flex items-center justify-center",
                 active
-                    ? "bg-[#2d2d2d] text-blue-400 shadow-sm ring-1 ring-white/5"
-                    : "text-secondary hover:bg-[#2d2d2d] hover:text-gray-200"
+                    ? "text-[#007acc] bg-[#2d2d2d]/50" // VS Code Accent Color for active state
+                    : "text-[#858585] hover:text-[#cccccc] hover:bg-[#2d2d2d]"
             )}
             title={`${label} ${shortcut ? `(${shortcut})` : ''}`}
         >
@@ -52,16 +52,16 @@ const TopBar: React.FC = () => {
     );
 
     return (
-        <div className="h-10 bg-[#1e1e1e] border-b border-[#2b2b2b] flex items-center justify-between px-3 shrink-0 select-none z-50 shadow-sm">
+        <div className="h-10 bg-[#333333] border-b border-[#252526] flex items-center justify-between px-3 shrink-0 select-none z-50">
 
             {/* LEFT: Empty spacer */}
             <div className="flex-1" />
 
             {/* CENTER: Context */}
-            <div className="absolute left-1/2 -translate-x-1/2 hidden md:flex items-center gap-2 text-xs text-gray-400 bg-[#252526] px-3 py-1 rounded-full border border-[#303030]">
+            <div className="absolute left-1/2 -translate-x-1/2 hidden md:flex items-center gap-2 text-[11px] text-[#cccccc] bg-[#252526] px-3 py-1 rounded border border-[#3c3c3c]">
                 <span className="opacity-70">truncate-ide</span>
                 <span className="opacity-40">/</span>
-                <span className="text-gray-200 font-medium">
+                <span className="font-medium text-white">
                     {activeDatabase ? activeDatabase : 'No Active Database'}
                 </span>
             </div>
@@ -103,16 +103,13 @@ const TopBar: React.FC = () => {
                     />
                 </div>
 
-                <div className="h-4 w-[1px] bg-[#3e3e3e] mx-1" />
+                <div className="h-4 w-[1px] bg-[#444444] mx-1" />
 
                 <button
                     onClick={useUiStore(s => s.toggleTheme)}
-                    className="text-secondary hover:text-white p-1.5 rounded hover:bg-[#2d2d2d] transition-colors"
+                    className="text-[#858585] hover:text-[#cccccc] p-1.5 rounded hover:bg-[#2d2d2d] transition-colors"
                     title="Toggle Theme (Void Minimal)"
                 >
-                    {/* Dynamic Icon based on theme? Or just a static icon for the toggle? */}
-                    {/* Let's use a Zap icon to represent 'Power Mode' / 'Void' */}
-                    <Settings className="w-4 h-4 hidden" /> {/* Keeping structure, but using Zap below */}
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
                         <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
                     </svg>
@@ -120,12 +117,12 @@ const TopBar: React.FC = () => {
 
                 <button
                     onClick={resetLayout}
-                    className="text-secondary hover:text-white p-1.5 rounded hover:bg-[#2d2d2d] transition-colors"
+                    className="text-[#858585] hover:text-[#cccccc] p-1.5 rounded hover:bg-[#2d2d2d] transition-colors"
                     title="Reset Layout"
                 >
                     <Layout className="w-4 h-4" />
                 </button>
-                <button className="text-secondary hover:text-white p-1.5 rounded hover:bg-[#2d2d2d] transition-colors" title="Settings">
+                <button className="text-[#858585] hover:text-[#cccccc] p-1.5 rounded hover:bg-[#2d2d2d] transition-colors" title="Settings">
                     <Settings className="w-4 h-4" />
                 </button>
             </div>

@@ -19,6 +19,7 @@ const ResizableLayout: React.FC = () => {
         showTerminal,
         showAssistant,
         showDataAudit,
+        activeRightTab,
         explorerLastSize,
         terminalLastSize,
         assistantLastSize,
@@ -26,6 +27,7 @@ const ResizableLayout: React.FC = () => {
         toggleTerminal,
         toggleAssistant,
         toggleDataAudit,
+        setActiveRightTab,
         setExplorerSize,
         setTerminalSize,
         setAssistantSize,
@@ -57,16 +59,16 @@ const ResizableLayout: React.FC = () => {
         toggleExplorer();
     };
 
-    const handleCloseAssistant = () => {
-        toggleAssistant();
-    };
-
     const handleCloseTerminal = () => {
         toggleTerminal();
     };
 
-    const handleCloseDataAudit = () => {
-        toggleDataAudit();
+    // Calculate if the right panel should be shown entirely
+    const showRightPanel = showAssistant || showDataAudit;
+
+    const handleCloseRightPanel = () => {
+        if (showAssistant) toggleAssistant();
+        if (showDataAudit) toggleDataAudit();
     };
 
     return (
@@ -87,12 +89,12 @@ const ResizableLayout: React.FC = () => {
                                 onResize={(size) => {
                                     setExplorerSize(size.inPixels);
                                 }}
-                                className="bg-panel flex flex-col border-r border-subtle"
+                                className="bg-panel flex flex-col"
                                 id="explorer-panel"
                             >
-                                {/* Panel Header with Close Button */}
-                                <div className="flex items-center justify-between px-3 py-2 border-b border-subtle">
-                                    <span className="text-xs uppercase tracking-wide text-secondary font-semibold">
+                                {/* Panel Header */}
+                                <div className="flex items-center justify-between px-4 py-2">
+                                    <span className="text-[11px] uppercase tracking-wider text-secondary font-semibold">
                                         Explorer
                                     </span>
                                     <button
@@ -108,7 +110,7 @@ const ResizableLayout: React.FC = () => {
                                     <DatabaseExplorer />
                                 </div>
                             </Panel>
-                            <Separator className="w-[6px] hover:w-[6px] bg-transparent hover:bg-accent/20 transition-colors cursor-col-resize" />
+                            <Separator className="w-[1px] hover:w-[2px] bg-subtle hover:bg-[#007acc] transition-colors cursor-col-resize z-10" />
                         </>
                     )}
 
@@ -124,7 +126,7 @@ const ResizableLayout: React.FC = () => {
                                         </div>
                                     </Panel>
                                     {showTerminal && (
-                                        <Separator className="h-[6px] hover:h-[6px] bg-transparent hover:bg-accent/20 transition-colors cursor-row-resize" />
+                                        <Separator className="h-[1px] hover:h-[2px] bg-subtle hover:bg-[#007acc] transition-colors cursor-row-resize z-10" />
                                     )}
                                 </>
                             )}
@@ -139,11 +141,11 @@ const ResizableLayout: React.FC = () => {
                                     onResize={(size) => {
                                         setTerminalSize(size.inPixels);
                                     }}
-                                    className="bg-panel flex flex-col border-t border-subtle"
+                                    className="bg-panel flex flex-col"
                                 >
-                                    {/* Panel Header with Safe Mode and Close Button */}
-                                    <div className="flex items-center justify-between px-3 py-1.5 border-b border-subtle">
-                                        <span className="text-xs uppercase tracking-wide text-secondary font-semibold">
+                                    {/* Panel Header */}
+                                    <div className="flex items-center justify-between px-4 py-1.5">
+                                        <span className="text-[11px] uppercase tracking-wider text-secondary font-semibold">
                                             Terminal
                                         </span>
                                         <div className="flex items-center gap-2">
@@ -203,68 +205,63 @@ const ResizableLayout: React.FC = () => {
                         </Group>
                     </Panel>
 
-                    {/* Right Panel: AI Assistant */}
-                    {showAssistant && (
+                    {/* Right Panel: Unified Tabs Container */}
+                    {showRightPanel && (
                         <>
-                            <Separator className="w-[6px] hover:w-[6px] bg-transparent hover:bg-accent/20 transition-colors cursor-col-resize" />
+                            <Separator className="w-[1px] hover:w-[2px] bg-subtle hover:bg-[#007acc] transition-colors cursor-col-resize z-10" />
                             <Panel
                                 defaultSize={assistantLastSize}
-                                minSize={220}
+                                minSize={250}
                                 maxSize={maxSidebarWidth}
                                 collapsible={false}
                                 onResize={(size) => {
                                     setAssistantSize(size.inPixels);
                                 }}
-                                className="bg-panel flex flex-col border-l border-subtle"
-                                id="assistant-panel"
+                                className="bg-panel flex flex-col"
+                                id="right-sidebar-panel"
                             >
-                                {/* Panel Header with Close Button */}
-                                <div className="flex items-center justify-between px-3 py-2 border-b border-subtle">
-                                    <span className="text-xs uppercase tracking-wide text-secondary font-semibold">
-                                        AI Assistant
-                                    </span>
-                                    <button
-                                        onClick={handleCloseAssistant}
-                                        className="p-1 hover:bg-subtle rounded transition-colors"
-                                        title="Close AI Assistant"
-                                    >
-                                        <X className="w-4 h-4" />
-                                    </button>
+                                {/* Monaco Style Tab Bar */}
+                                <div className="flex items-center justify-between bg-[#252526] shrink-0 border-b border-subtle relative">
+                                    <div className="flex items-end h-full mt-1.5 ml-2 overflow-x-auto no-scrollbar">
+                                        <button
+                                            onClick={() => setActiveRightTab('ai')}
+                                            className={`px-3 py-1.5 min-w-[100px] text-[11px] font-medium transition-colors border-t border-t-transparent ${activeRightTab === 'ai'
+                                                ? 'bg-app text-white border-t-[#007acc] border-x border-x-subtle/50'
+                                                : 'text-secondary hover:text-[#cccccc] bg-transparent'
+                                                }`}
+                                        >
+                                            AI Assistant
+                                        </button>
+                                        <button
+                                            onClick={() => setActiveRightTab('audit')}
+                                            className={`px-3 py-1.5 min-w-[100px] text-[11px] font-medium transition-colors border-t border-t-transparent ${activeRightTab === 'audit'
+                                                ? 'bg-app text-white border-t-[#007acc] border-x border-x-subtle/50 -ml-px'
+                                                : 'text-secondary hover:text-[#cccccc] bg-transparent -ml-px'
+                                                }`}
+                                        >
+                                            Data Audit
+                                        </button>
+                                    </div>
+                                    <div className="flex items-center px-2">
+                                        <button
+                                            onClick={handleCloseRightPanel}
+                                            className="p-1 text-secondary hover:text-white hover:bg-[#333333] rounded transition-colors"
+                                            title="Close Panel"
+                                        >
+                                            <X className="w-3.5 h-3.5" />
+                                        </button>
+                                    </div>
                                 </div>
-                                {/* Scrollable Content */}
-                                <div className="flex-1 overflow-auto">
-                                    <AiAssistant />
-                                </div>
-                            </Panel>
-                        </>
-                    )}
 
-                    {/* Right Panel: Data Audit */}
-                    {showDataAudit && (
-                        <>
-                            <Separator className="w-[6px] hover:w-[6px] bg-transparent hover:bg-accent/20 transition-colors cursor-col-resize" />
-                            <Panel
-                                defaultSize={30}
-                                minSize={20}
-                                maxSize={40}
-                                collapsible={false}
-                                className="bg-panel flex flex-col border-l border-subtle"
-                                id="data-audit-panel"
-                            >
-                                {/* Panel Header with Close Button */}
-                                <div className="flex items-center justify-between px-3 py-2 border-b border-subtle">
-                                    <span className="text-xs uppercase tracking-wide text-secondary font-semibold">
-                                        Data Audit
-                                    </span>
-                                    <button
-                                        onClick={handleCloseDataAudit}
-                                        className="p-1 hover:bg-subtle rounded transition-colors"
-                                        title="Close Data Audit"
-                                    >
-                                        <X className="w-4 h-4" />
-                                    </button>
+                                {/* Active Tab Content */}
+                                <div className="flex-1 overflow-hidden flex flex-col bg-app">
+                                    <div className={activeRightTab === 'ai' ? 'flex flex-col h-full' : 'hidden'}>
+                                        <AiAssistant />
+                                    </div>
+                                    <div className={activeRightTab === 'audit' ? 'flex flex-col h-full' : 'hidden'}>
+                                        <DataAuditPanel />
+                                    </div>
                                 </div>
-                                <DataAuditPanel />
                             </Panel>
                         </>
                     )}

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useUiStore } from '../../store/uiStore';
-import { Loader2, Sparkles, Database } from 'lucide-react';
+import { Loader2, Sparkles } from 'lucide-react';
 import clsx from 'clsx';
 
 // Types (Mirroring Backend)
@@ -27,7 +27,7 @@ interface TableProfile {
 }
 
 export const DataAuditPanel: React.FC = () => {
-    const { showDataAudit, toggleDataAudit } = useUiStore();
+    const { showDataAudit } = useUiStore();
     const [tableName, setTableName] = useState('');
     const [profile, setProfile] = useState<TableProfile | null>(null);
     const [loading, setLoading] = useState(false);
@@ -68,30 +68,22 @@ export const DataAuditPanel: React.FC = () => {
     };
 
     return (
-        <div className="flex flex-col h-full bg-[#0a0a0a] text-gray-200 border-l border-white/10">
-            {/* Header */}
-            <div className="flex items-center justify-between p-4 border-b border-white/10">
-                <div className="flex items-center gap-2">
-                    <Database className="w-4 h-4 text-purple-400" />
-                    <h2 className="font-semibold text-sm tracking-wider">DATA AUDIT</h2>
-                </div>
-                <button onClick={toggleDataAudit} className="text-xs hover:text-white">✕</button>
-            </div>
+        <div className="flex flex-col h-full bg-panel text-primary border-l border-subtle font-sans">
 
             {/* Controls */}
-            <div className="p-4 flex flex-col gap-3 border-b border-white/10">
+            <div className="p-3 flex flex-col gap-3 border-b border-subtle">
                 <div className="flex gap-2">
                     <input
                         type="text"
                         placeholder="Table Name"
-                        className="bg-black/40 border border-white/10 rounded px-2 py-1 text-sm flex-1 focus:outline-none focus:border-purple-500"
+                        className="bg-[#3c3c3c] border border-subtle rounded-sm px-2 py-1 text-[11px] flex-1 focus:outline-none focus:border-[#007acc] text-[#cccccc] placeholder-[#888888]"
                         value={tableName}
                         onChange={(e) => setTableName(e.target.value)}
                     />
                     <button
                         onClick={runProfile}
                         disabled={loading || !tableName}
-                        className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded text-xs font-medium disabled:opacity-50 flex items-center gap-1"
+                        className="bg-[#007acc] hover:bg-[#005f9e] text-white px-3 py-1 rounded-sm text-[11px] font-medium disabled:opacity-50 flex items-center gap-1 transition-colors"
                     >
                         {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : 'RUN'}
                     </button>
@@ -104,13 +96,13 @@ export const DataAuditPanel: React.FC = () => {
                     <>
                         {/* Summary Cards */}
                         <div className="grid grid-cols-2 gap-2">
-                            <div className="bg-white/5 p-3 rounded border border-white/5">
-                                <div className="text-xs text-gray-400">Total Rows</div>
-                                <div className="text-xl font-bold">{profile.row_count}</div>
+                            <div className="bg-[#2d2d2d] p-3 rounded-sm border border-subtle">
+                                <div className="text-[10px] text-secondary uppercase font-semibold">Total Rows</div>
+                                <div className="text-lg font-bold text-primary">{profile.row_count}</div>
                             </div>
-                            <div className={clsx("p-3 rounded border", profile.duplicates_count > 0 ? "bg-red-500/10 border-red-500/50" : "bg-white/5 border-white/5")}>
-                                <div className="text-xs text-gray-400">Duplicates</div>
-                                <div className={clsx("text-xl font-bold", profile.duplicates_count > 0 ? "text-red-400" : "text-gray-200")}>
+                            <div className={clsx("p-3 rounded-sm border", profile.duplicates_count > 0 ? "bg-red-500/10 border-red-500/50" : "bg-[#2d2d2d] border-subtle")}>
+                                <div className="text-[10px] text-secondary uppercase font-semibold">Duplicates</div>
+                                <div className={clsx("text-lg font-bold", profile.duplicates_count > 0 ? "text-[#f14c4c]" : "text-primary")}>
                                     {profile.duplicates_count}
                                 </div>
                             </div>
@@ -118,26 +110,26 @@ export const DataAuditPanel: React.FC = () => {
 
                         {/* Columns List */}
                         <div className="space-y-2">
-                            <h3 className="text-xs font-bold text-gray-500 uppercase">Columns Analysis</h3>
+                            <h3 className="text-[10px] font-bold text-secondary uppercase tracking-wider">Columns Analysis</h3>
                             {profile.columns.map(col => (
-                                <div key={col.name} className="bg-white/5 rounded border border-white/5 p-3 text-sm">
-                                    <div className="flex justify-between items-start mb-2">
-                                        <div className="font-medium text-purple-300">{col.name}</div>
-                                        <div className="text-[10px] bg-white/10 px-1.5 py-0.5 rounded text-gray-400">{col.inferred_type}</div>
+                                <div key={col.name} className="bg-[#2d2d2d] rounded-sm border border-subtle p-3 text-[11px]">
+                                    <div className="flex justify-between items-center mb-2">
+                                        <div className="font-medium text-[#4fc1ff]">{col.name}</div>
+                                        <div className="text-[9px] bg-[#3c3c3c] border border-subtle px-1.5 py-0.5 rounded-sm text-secondary uppercase">{col.inferred_type}</div>
                                     </div>
-                                    <div className="grid grid-cols-2 gap-y-1 gap-x-4 text-xs text-gray-400">
+                                    <div className="grid grid-cols-2 gap-y-1 gap-x-4 text-[10px] text-secondary">
                                         <div className="flex justify-between">
                                             <span>Nulls:</span>
-                                            <span className={col.null_percentage > 0 ? "text-yellow-500" : ""}>
+                                            <span className={col.null_percentage > 0 ? "text-[#cca700]" : "text-primary"}>
                                                 {col.null_count} ({col.null_percentage.toFixed(1)}%)
                                             </span>
                                         </div>
                                         <div className="flex justify-between">
                                             <span>Distinct:</span>
-                                            <span>{col.distinct_count}</span>
+                                            <span className="text-primary">{col.distinct_count}</span>
                                         </div>
                                         {col.outliers_count > 0 && (
-                                            <div className="col-span-2 flex justify-between text-red-400">
+                                            <div className="col-span-2 flex justify-between text-[#f14c4c]">
                                                 <span>Outliers (Z&gt;3):</span>
                                                 <span>{col.outliers_count}</span>
                                             </div>
@@ -148,22 +140,22 @@ export const DataAuditPanel: React.FC = () => {
                         </div>
 
                         {/* AI Section */}
-                        <div className="pt-4 border-t border-white/10">
+                        <div className="pt-4 border-t border-subtle">
                             {!aiSuggestion ? (
                                 <button
                                     onClick={askAi}
                                     disabled={aiLoading}
-                                    className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:opacity-90 text-white py-2 rounded flex items-center justify-center gap-2 text-sm font-medium"
+                                    className="w-full bg-[#0E639C] hover:bg-[#1177BB] text-white py-1.5 rounded-sm flex items-center justify-center gap-2 text-[11px] font-medium transition-colors"
                                 >
-                                    {aiLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Sparkles className="w-4 h-4" /> Ask AI for Cleaning Strategy</>}
+                                    {aiLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <><Sparkles className="w-3.5 h-3.5" /> Ask AI for Cleaning Strategy</>}
                                 </button>
                             ) : (
-                                <div className="bg-blue-500/10 border border-blue-500/20 rounded p-3">
-                                    <div className="flex items-center gap-2 mb-2 text-blue-400">
-                                        <Sparkles className="w-4 h-4" />
-                                        <span className="text-xs font-bold uppercase">AI Suggestions</span>
+                                <div className="bg-[#252526] border border-[#0E639C] rounded-sm p-3">
+                                    <div className="flex items-center gap-2 mb-2 text-[#4fc1ff]">
+                                        <Sparkles className="w-3.5 h-3.5" />
+                                        <span className="text-[10px] font-bold uppercase tracking-wide">AI Suggestions</span>
                                     </div>
-                                    <pre className="text-xs whitespace-pre-wrap font-mono text-blue-200">
+                                    <pre className="text-[11px] whitespace-pre-wrap font-mono text-[#cccccc]">
                                         {aiSuggestion}
                                     </pre>
                                 </div>

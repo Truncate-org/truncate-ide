@@ -8,9 +8,11 @@ interface UiStore {
     showTerminal: boolean;
     showAssistant: boolean;
     showDataAudit: boolean; // New Panel
-
     // Theme
     theme: 'default' | 'void-minimal';
+
+    // Right Sidebar Tab Management
+    activeRightTab: 'ai' | 'audit';
 
     // Panel Sizes (in pixels)
     explorerLastSize: number;
@@ -23,6 +25,7 @@ interface UiStore {
     toggleTerminal: () => void;
     toggleAssistant: () => void;
     toggleDataAudit: () => void; // New Action
+    setActiveRightTab: (tab: 'ai' | 'audit') => void;
     toggleTheme: () => void;
     setExplorerSize: (size: number) => void;
     setTerminalSize: (size: number) => void;
@@ -38,6 +41,7 @@ export const useUiStore = create<UiStore>()(
             showTerminal: true,
             showAssistant: true,
             showDataAudit: false, // Default hidden
+            activeRightTab: 'ai',
             theme: 'default',
 
             // Default panel sizes in pixels
@@ -48,8 +52,27 @@ export const useUiStore = create<UiStore>()(
             toggleExplorer: () => set((state) => ({ showExplorer: !state.showExplorer })),
             togglePreview: () => set((state) => ({ showPreview: !state.showPreview })),
             toggleTerminal: () => set((state) => ({ showTerminal: !state.showTerminal })),
-            toggleAssistant: () => set((state) => ({ showAssistant: !state.showAssistant })),
-            toggleDataAudit: () => set((state) => ({ showDataAudit: !state.showDataAudit })),
+
+            toggleAssistant: () => set((state) => {
+                const willShow = !state.showAssistant;
+                return {
+                    showAssistant: willShow,
+                    showDataAudit: willShow ? false : state.showDataAudit, // Close the other
+                    activeRightTab: 'ai'
+                };
+            }),
+
+            toggleDataAudit: () => set((state) => {
+                const willShow = !state.showDataAudit;
+                return {
+                    showDataAudit: willShow,
+                    showAssistant: willShow ? false : state.showAssistant, // Close the other
+                    activeRightTab: 'audit'
+                };
+            }),
+
+            setActiveRightTab: (tab: 'ai' | 'audit') => set({ activeRightTab: tab }),
+
             toggleTheme: () => set((state) => ({ theme: state.theme === 'default' ? 'void-minimal' : 'default' })),
 
             setExplorerSize: (size: number) => set({ explorerLastSize: size }),
@@ -62,6 +85,7 @@ export const useUiStore = create<UiStore>()(
                 showTerminal: true,
                 showAssistant: true,
                 showDataAudit: false,
+                activeRightTab: 'ai',
                 explorerLastSize: 280,
                 terminalLastSize: 200,
                 assistantLastSize: 320,
@@ -75,6 +99,7 @@ export const useUiStore = create<UiStore>()(
                 showTerminal: state.showTerminal,
                 showAssistant: state.showAssistant,
                 showDataAudit: state.showDataAudit,
+                activeRightTab: state.activeRightTab,
                 explorerLastSize: state.explorerLastSize,
                 terminalLastSize: state.terminalLastSize,
                 assistantLastSize: state.assistantLastSize,

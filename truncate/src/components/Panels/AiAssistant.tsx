@@ -38,16 +38,12 @@ const AiAssistant: React.FC = () => {
 
     return (
         <div className="flex flex-col h-full bg-panel text-primary font-sans">
-            {/* Header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-subtle bg-panel shadow-sm z-10">
-                <div className="flex items-center space-x-2">
-                    <div className="w-5 h-5 rounded bg-accent/20 flex items-center justify-center text-accent text-[10px] font-bold ring-1 ring-accent/30">AI</div>
-                    <span className="text-sm font-semibold tracking-wide">Assistant</span>
-                </div>
-                <div className="flex items-center space-x-2">
-                    <div className={`w-2 h-2 rounded-full ${status === 'online' ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-yellow-500 animate-pulse'}`}></div>
-                    <span className="text-[10px] uppercase font-bold text-secondary tracking-wider">
-                        {status === 'online' ? 'Local • Online' : 'Initializing...'}
+            {/* Status Bar */}
+            <div className="flex items-center justify-end px-3 py-1 border-b border-subtle bg-panel z-10">
+                <div className="flex items-center space-x-1.5">
+                    <div className={`w-1.5 h-1.5 rounded-full ${status === 'online' ? 'bg-[#89d185]' : 'bg-[#cca700] animate-pulse'}`}></div>
+                    <span className="text-[10px] uppercase font-medium text-secondary">
+                        {status === 'online' ? 'Online' : 'Initializing...'}
                     </span>
                 </div>
             </div>
@@ -173,7 +169,7 @@ const AiAssistant: React.FC = () => {
                         return (
                             <div key={renderKey} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                                 {msg.role === 'user' ? (
-                                    <div className="bg-accent/10 text-primary px-4 py-2.5 rounded-2xl rounded-tr-sm max-w-[85%] text-sm leading-relaxed border border-accent/20 shadow-sm">
+                                    <div className="bg-[#37373d] text-[#cccccc] px-3 py-2 rounded-md max-w-[85%] text-sm leading-relaxed border border-[#454545]">
                                         {msg.content}
                                     </div>
                                 ) : (
@@ -181,8 +177,8 @@ const AiAssistant: React.FC = () => {
                                         {/* AI Header */}
                                         {msg.type !== 'error' && (
                                             <div className="flex items-center space-x-2 mb-1 pl-1">
-                                                <div className="w-5 h-5 rounded bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-[9px] font-bold shadow-sm">AI</div>
-                                                <span className="text-xs text-secondary font-medium">Truncate AI</span>
+                                                <div className="w-5 h-5 rounded-sm bg-[#007acc] flex items-center justify-center text-white text-[9px] font-bold">AI</div>
+                                                <span className="text-xs text-[#cccccc] font-medium">Truncate AI</span>
                                             </div>
                                         )}
 
@@ -198,8 +194,8 @@ const AiAssistant: React.FC = () => {
 
                                                 {/* SQL Editor Block */}
                                                 {sql && (
-                                                    <div className="rounded-lg border border-subtle bg-app overflow-hidden shadow-sm mt-3">
-                                                        <div className="flex items-center justify-between px-3 py-1.5 bg-subtle/30 border-b border-subtle/50">
+                                                    <div className="rounded border border-subtle bg-[#1e1e1e] overflow-hidden mt-3">
+                                                        <div className="flex items-center justify-between px-3 py-1.5 bg-[#2d2d2d] border-b border-subtle">
                                                             <span className="text-[10px] text-secondary font-mono uppercase tracking-wider">SQL</span>
                                                             <div className="flex space-x-1">
                                                                 <button
@@ -276,7 +272,7 @@ const AiAssistant: React.FC = () => {
             )}
 
             {/* Input Area */}
-            <div className="p-4 border-t border-subtle bg-panel/50 backdrop-blur-sm">
+            <div className="p-3 border-t border-subtle bg-panel">
                 {status === 'online' ? (
                     <AiPromptBox />
                 ) : (
