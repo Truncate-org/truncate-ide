@@ -9,6 +9,7 @@ use crate::adapter::{ConnectionType, DatabaseAdapter};
 pub struct TerminalSession {
     pub writer: Box<dyn Write + Send>,
     pub master: Box<dyn portable_pty::MasterPty + Send>,
+    pub child: Box<dyn portable_pty::Child + Send + Sync>,
 }
 
 pub struct TerminalState {
@@ -149,7 +150,7 @@ fn start_terminal_with_env(
     }
 
     // Spawn the process in the pty
-    let _child = pair
+    let child = pair
         .slave
         .spawn_command(cmd)
         .map_err(|e| format!("Failed to spawn command: {}", e))?;
@@ -165,6 +166,7 @@ fn start_terminal_with_env(
             TerminalSession {
                 writer,
                 master: pair.master,
+                child,
             },
         );
     }
@@ -238,8 +240,10 @@ pub fn stop_terminal(
     id: String,
 ) -> Result<(), String> {
     let mut sessions = state.sessions.lock().unwrap();
-    if sessions.remove(&id).is_some() {
+    if let Some(mut session) = sessions.remove(&id) {
         // Dropping the session (which contains the PtyMaster) should terminate the process.
+        // Explicitly kill the child to avoid orphans.
+        let _ = session.child.kill();
         Ok(())
     } else {
         Ok(())

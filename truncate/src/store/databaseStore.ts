@@ -172,6 +172,11 @@ export const useDatabaseStore = create<DatabaseStore>((set, get) => ({
                 connectionStatus: 'CONNECTED' // Base connection established, but no DB active yet
             });
             get().initializeListeners(); // Start listening
+
+            // Auto-select database if using a file-based connection (SQLite/CSV)
+            if ((dbType === 'sqlite' || dbType === 'csv') && databases.length > 0) {
+                await get().selectDatabase(databases[0]);
+            }
         } catch (error: any) {
             set({
                 connectionError: error.toString(),

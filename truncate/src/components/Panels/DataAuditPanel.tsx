@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useUiStore } from '../../store/uiStore';
+import { useDatabaseStore } from '../../store/databaseStore';
 import { Loader2, Sparkles } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -28,11 +29,21 @@ interface TableProfile {
 
 export const DataAuditPanel: React.FC = () => {
     const { showDataAudit } = useUiStore();
+    const { tables, activeTable } = useDatabaseStore();
     const [tableName, setTableName] = useState('');
     const [profile, setProfile] = useState<TableProfile | null>(null);
     const [loading, setLoading] = useState(false);
     const [aiLoading, setAiLoading] = useState(false);
     const [aiSuggestion, setAiSuggestion] = useState<string | null>(null);
+
+    // Sync tableName with activeTable
+    React.useEffect(() => {
+        if (activeTable) {
+            setTableName(activeTable);
+        } else if (tables.length > 0 && !tableName) {
+            setTableName(tables[0]);
+        }
+    }, [activeTable, tables]);
 
     if (!showDataAudit) return null;
 
@@ -73,17 +84,27 @@ export const DataAuditPanel: React.FC = () => {
             {/* Controls */}
             <div className="p-3 flex flex-col gap-3 border-b border-subtle">
                 <div className="flex gap-2">
-                    <input
-                        type="text"
-                        placeholder="Table Name"
-                        className="bg-[#3c3c3c] border border-subtle rounded-sm px-2 py-1 text-[11px] flex-1 focus:outline-none focus:border-[#007acc] text-[#cccccc] placeholder-[#888888]"
-                        value={tableName}
-                        onChange={(e) => setTableName(e.target.value)}
-                    />
+                    <div className="relative flex-1">
+                        <select
+                            className="w-full bg-[#3c3c3c] border border-subtle rounded-sm px-2 py-1 text-[11px] h-[26px] focus:outline-none focus:border-[#007acc] text-[#cccccc] appearance-none"
+                            value={tableName}
+                            onChange={(e) => setTableName(e.target.value)}
+                        >
+                            <option value="" disabled>Select Table</option>
+                            {tables.map((t: string) => (
+                                <option key={t} value={t}>{t}</option>
+                            ))}
+                        </select>
+                        <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none text-gray-500">
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                            </svg>
+                        </div>
+                    </div>
                     <button
                         onClick={runProfile}
                         disabled={loading || !tableName}
-                        className="bg-[#007acc] hover:bg-[#005f9e] text-white px-3 py-1 rounded-sm text-[11px] font-medium disabled:opacity-50 flex items-center gap-1 transition-colors"
+                        className="bg-[#007acc] hover:bg-[#005f9e] text-white px-3 py-1 rounded-sm text-[11px] font-medium disabled:opacity-50 flex items-center gap-1 transition-colors h-[26px]"
                     >
                         {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : 'RUN'}
                     </button>

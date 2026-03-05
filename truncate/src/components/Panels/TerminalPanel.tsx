@@ -9,7 +9,7 @@ import { Terminal as TerminalIcon, AlertTriangle, Loader2 } from 'lucide-react';
 
 // VS Code Dark Modern Colors
 const THEME = {
-    background: '#181818',
+    background: '#1e1e1e', // Matched to parent container
     foreground: '#cccccc',
     cursor: '#ffffff',
     selection: '#264f78',
@@ -95,10 +95,12 @@ function TerminalPanelInner({ readOnly = true, setReadOnly: _setReadOnly = () =>
     const DB_REFRESH_REGEX = /^(CREATE|DROP|ALTER)\s+DATABASE/i;
     const TABLE_REFRESH_REGEX = /^(CREATE|DROP|ALTER|TRUNCATE)\s+TABLE/i;
 
+    const instanceIdRef = useRef(`term-${Math.random().toString(36).substr(2, 9)}`);
+
     // Helper: Send raw data to PTY
     const sendToPty = useCallback(async (data: string) => {
         try {
-            await invoke('write_terminal', { id: 'term-1', data });
+            await invoke('write_terminal', { id: instanceIdRef.current, data });
         } catch (e) {
             console.error('[Terminal] Failed to write to PTY:', e);
         }
@@ -110,7 +112,7 @@ function TerminalPanelInner({ readOnly = true, setReadOnly: _setReadOnly = () =>
         const cmd = pendingCommand;
         setPendingCommand(null);
         if (cmd) {
-            await sendToPty(cmd + '\r');
+            await sendToPty(cmd + '\x0D');
         }
     }, [pendingCommand, sendToPty]);
 
@@ -129,7 +131,7 @@ function TerminalPanelInner({ readOnly = true, setReadOnly: _setReadOnly = () =>
         if (trimmed.includes(';') && countStatements(trimmed) > 1) {
             term.write('\r\n\x1b[33m⚠  Run one statement at a time.\x1b[0m\r\n');
             // Re-print the prompt by sending a blank Enter to PTY
-            await sendToPty('\r');
+            await sendToPty('\x0D');
             inputBufferRef.current = '';
             inputCursorRef.current = 0;
             multilineBufferRef.current = '';
@@ -160,7 +162,7 @@ function TerminalPanelInner({ readOnly = true, setReadOnly: _setReadOnly = () =>
 
         // 4. Check if statement is complete (ends with ;) or if it's a non-SQL command
         const isStatementComplete = trimmed.endsWith(';');
-        const isMeta = /^\\|^SHOW\s|^DESCRIBE\s|^DESC\s|^EXPLAIN\s|^USE\s|^HELP|^QUIT|^EXIT|^\.quit|^\.tables|^\.schema|^\.exit/i.test(trimmed);
+        const isMeta = /^\\|^SHOW\s|^DESCRIBE\s|^DESC\s|^EXPLAIN\s|^USE\s|^HELP|^QUIT|^EXIT|^\./i.test(trimmed);
 
         if (isStatementComplete || isMeta || !trimmed) {
             // Complete statement or meta-command — mark as executing
@@ -173,10 +175,17 @@ function TerminalPanelInner({ readOnly = true, setReadOnly: _setReadOnly = () =>
                     historyRef.current = [trimmed, ...historyRef.current.slice(0, 100)];
                 }
                 historyIndexRef.current = -1;
+
+                // SYNC TERMINAL TO GRID: Silently execute reading queries in the background so the Grid updates
+                if (/^(SELECT|SHOW|DESCRIBE|DESC|EXPLAIN|PRAGMA)/i.test(trimmed)) {
+                    invoke('sql_run_query', { sql: trimmed }).catch(e => {
+                        console.warn("[Terminal Sync] Silently ignored grid update error:", e);
+                    });
+                }
             }
 
             // Send Enter to PTY — the CLI handles execution
-            await sendToPty('\r');
+            await sendToPty(currentLine + '\x0D');
 
             // Reset buffers
             inputBufferRef.current = '';
@@ -186,7 +195,7 @@ function TerminalPanelInner({ readOnly = true, setReadOnly: _setReadOnly = () =>
             // Incomplete statement — multiline: send Enter to PTY (CLI shows continuation prompt)
             multilineBufferRef.current = fullBuffer;
 
-            await sendToPty('\r');
+            await sendToPty(currentLine + '\x0D');
 
             inputBufferRef.current = '';
             inputCursorRef.current = 0;
@@ -351,7 +360,7 @@ function TerminalPanelInner({ readOnly = true, setReadOnly: _setReadOnly = () =>
         // Output Listener (data coming FROM the PTY)
         const unlisten = listen('terminal-output', (event: any) => {
             const [id, data] = event.payload;
-            if (id === 'term-1') {
+            if (id === instanceIdRef.current) {
                 term.write(data);
 
                 if (typeof data === 'string') {
@@ -401,7 +410,7 @@ function TerminalPanelInner({ readOnly = true, setReadOnly: _setReadOnly = () =>
         // Terminal Exit Listener — PTY process died
         const unlistenExit = listen('terminal-exit', (event: any) => {
             const id = event.payload;
-            if (id === 'term-1') {
+            if (id === instanceIdRef.current) {
                 term.write('\r\n\x1b[31m[Terminal] Session ended. Reconnect to restart.\x1b[0m\r\n');
                 term.options.disableStdin = true;
                 isExecutingRef.current = false;
@@ -419,7 +428,7 @@ function TerminalPanelInner({ readOnly = true, setReadOnly: _setReadOnly = () =>
                     fitAddon.fit();
                     const dims = fitAddon.proposeDimensions();
                     if (dims && useDatabaseStore.getState().isConnected) {
-                        invoke('resize_terminal', { id: 'term-1', rows: dims.rows, cols: dims.cols });
+                        invoke('resize_terminal', { id: instanceIdRef.current, rows: dims.rows, cols: dims.cols });
                     }
                     // Restore focus if it was focused before resize
                     if (wasFocusedRef.current) {
@@ -433,6 +442,8 @@ function TerminalPanelInner({ readOnly = true, setReadOnly: _setReadOnly = () =>
         resizeObserver.observe(terminalRef.current);
 
         return () => {
+            const currentId = instanceIdRef.current;
+            invoke('stop_terminal', { id: currentId }).catch(() => { });
             term.dispose();
             resizeObserver.disconnect();
             unlisten.then(f => f());
@@ -440,64 +451,61 @@ function TerminalPanelInner({ readOnly = true, setReadOnly: _setReadOnly = () =>
         };
     }, []);
 
-    // Auto Connect Effect
+    // Auto Connect Effect (Boot only)
     useEffect(() => {
-        if (isConnected) {
+        if (isConnected && connectionStatus === 'ACTIVE' && lastSyncedDbRef.current === null) {
+            console.log(`[Terminal] Booting terminal for connection`);
+            // Mark as booting to prevent Sync Effect from double booting
+            lastSyncedDbRef.current = activeDatabase || 'connected';
+
             xtermRef.current?.clear();
-            invoke('start_terminal_auto', { id: 'term-1' }).then(() => {
+            invoke('start_terminal_auto', { id: instanceIdRef.current }).then(() => {
                 setTimeout(() => {
                     fitAddonRef.current?.fit();
                     const dims = fitAddonRef.current?.proposeDimensions();
-                    if (dims) invoke('resize_terminal', { id: 'term-1', rows: dims.rows, cols: dims.cols });
+                    if (dims) invoke('resize_terminal', { id: instanceIdRef.current, rows: dims.rows, cols: dims.cols });
                     xtermRef.current?.focus();
                 }, 100);
             }).catch(e => {
                 xtermRef.current?.write(`\r\n\x1b[31mFailed to launch terminal: ${e}\x1b[0m\r\n`);
             });
-        } else {
-            xtermRef.current?.clear();
         }
-    }, [isConnected]);
+    }, [isConnected, connectionStatus, activeDatabase]);
 
-    // Sync Effect (Boot & Switch)
+    // Sync Effect (Switch only)
     useEffect(() => {
         if (isConnected && activeDatabase && connectionStatus === 'ACTIVE') {
-            const isFreshBoot = lastSyncedDbRef.current === null;
-            if (activeDatabase !== lastSyncedDbRef.current) {
-                console.log(`[Terminal] Syncing. Fresh Boot: ${isFreshBoot}. Target: ${activeDatabase}`);
+            if (lastSyncedDbRef.current !== null &&
+                lastSyncedDbRef.current !== 'connected' &&
+                activeDatabase !== lastSyncedDbRef.current) {
+                console.log(`[Terminal] Switching context to: ${activeDatabase}`);
 
-                if (isFreshBoot) {
-                    xtermRef.current?.clear();
-                    invoke('start_terminal_auto', { id: 'term-1' }).then(() => {
+                if (connectionType === 'postgres') {
+                    if (xtermRef.current) {
+                        xtermRef.current.options.disableStdin = true;
+                        xtermRef.current.clear();
+                        xtermRef.current.write(`\r\n\x1b[34m[IDE] Switching database context to "${activeDatabase}"...\x1b[0m\r\n`);
+                    }
+                    invoke('start_terminal_auto', { id: instanceIdRef.current }).then(() => {
                         if (xtermRef.current) {
                             xtermRef.current.focus();
                             xtermRef.current.options.disableStdin = false;
                         }
                         lastSyncedDbRef.current = activeDatabase;
-                    }).catch(console.error);
-
+                    }).catch(e => {
+                        xtermRef.current?.write(`\r\n\x1b[31mFailed to switch terminal context: ${e}\x1b[0m\r\n`);
+                        if (xtermRef.current) xtermRef.current.options.disableStdin = false;
+                    });
+                } else if (connectionType === 'mysql') {
+                    invoke('write_terminal', { id: instanceIdRef.current, data: `USE ${activeDatabase};\x0D` });
+                    lastSyncedDbRef.current = activeDatabase;
                 } else {
-                    if (connectionType === 'postgres') {
-                        if (xtermRef.current) {
-                            xtermRef.current.options.disableStdin = true;
-                            xtermRef.current.clear();
-                            xtermRef.current.write(`\r\n\x1b[34m[IDE] Switching database context to "${activeDatabase}"...\x1b[0m\r\n`);
-                        }
-                        invoke('start_terminal_auto', { id: 'term-1' }).then(() => {
-                            if (xtermRef.current) {
-                                xtermRef.current.focus();
-                                xtermRef.current.options.disableStdin = false;
-                            }
-                            lastSyncedDbRef.current = activeDatabase;
-                        }).catch(e => {
-                            xtermRef.current?.write(`\r\n\x1b[31mFailed to switch terminal context: ${e}\x1b[0m\r\n`);
-                            if (xtermRef.current) xtermRef.current.options.disableStdin = false;
-                        });
-                    } else {
-                        invoke('write_terminal', { id: 'term-1', data: `USE ${activeDatabase};\r` });
-                        lastSyncedDbRef.current = activeDatabase;
-                    }
+                    // SQLite / CSV have 1 file per connection, DB "switching" is handled differently or unnecessary
+                    lastSyncedDbRef.current = activeDatabase;
                 }
+            } else if (lastSyncedDbRef.current === 'connected') {
+                // Was booted before activeDatabase was known, update it now
+                lastSyncedDbRef.current = activeDatabase;
             }
         }
     }, [isConnected, activeDatabase, connectionType, connectionStatus]);
@@ -618,7 +626,7 @@ function TerminalPanelInner({ readOnly = true, setReadOnly: _setReadOnly = () =>
                                         setShowConfirm(false);
                                         setPendingCommand(null);
                                         // Send a blank enter to re-show prompt
-                                        sendToPty('\r');
+                                        sendToPty('\x0D');
                                     }}
                                 >
                                     Cancel
