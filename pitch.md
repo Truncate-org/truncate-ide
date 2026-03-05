@@ -7,6 +7,9 @@
 **Data is the new oil, but most of it is "unrefined" and "high-risk."**
 *   **The Data Cleaning Tax**: Engineers spend 80% of their time cleaning and auditing data before it’s useful.
 *   **The Privacy Paradox**: Enterprises want AI-powered insights but cannot send sensitive data (Healthcare, Defense, Banking) to cloud-based LLMs due to compliance (HIPAA, GDPR).
+    *   **Current Workarounds**: Companies currently attempt **PII Masking** (destroying data utility) or expensive **Private Cloud VPCs** (Azure OpenAI, AWS Bedrock).
+    *   **The Failure of Status Quo**: These methods are expensive, require specialized ML engineers, and usually compromise data accuracy. Even "Private" cloud instances require data to leave the physical premises.
+    *   **The "Big Tech" Trap**: Giants like **Gemini (Google)** and **Claude (Anthropic)** offer "Enterprise Tiers" that promise not to train on your data, but they still require a persistent internet connection and trust in a third-party cloud provider. For Air-Gapped or Edge environments (Military, Secure Labs), they are fundamentally unusable.
 *   **Fragmented Tools**: Teams jump between SQL clients, Python scripts, and Excel to manage data pipelines, leading to silos and errors.
 
 ## 2. The Solution: Truncate IDE
