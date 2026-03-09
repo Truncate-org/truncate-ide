@@ -5,8 +5,10 @@ use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Mutex;
-use tauri::State;
+use tauri::{State, Emitter};
 use tokio::task::AbortHandle;
+use futures_util::StreamExt;
+use tauri_plugin_shell::{process::CommandChild, ShellExt};
 
 // -----------------------------------------------------------------------------
 // 1. Data Structures
@@ -156,6 +158,67 @@ pub struct AiStatus {
     pub message: String,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct PullProgress {
+    pub status: String,
+    pub digest: Option<String>,
+    pub total: Option<u64>,
+    pub completed: Option<u64>,
+}
+
+#[tauri::command]
+pub async fn is_engine_installed(app: tauri::AppHandle) -> bool {
+    // Check if sidecar exists
+    let sidecar_exists = match app.shell().sidecar("ollama") {
+        Ok(_) => true,
+        Err(_) => false,
+    };
+
+    if sidecar_exists {
+        return true;
+    }
+
+    // Fallback: check system PATH
+    std::process::Command::new("ollama")
+        .arg("--version")
+        .output()
+        .is_ok()
+}
+
+#[tauri::command]
+pub async fn sync_engine_assets(window: tauri::Window) -> Result<(), String> {
+    let client = reqwest::Client::new();
+    let url = "http://127.0.0.1:11434/api/pull";
+    
+    let payload = serde_json::json!({
+        "name": "qwen2.5-coder:latest",
+        "stream": true
+    });
+
+    let res = client.post(url)
+        .json(&payload)
+        .send()
+        .await
+        .map_err(|e| format!("Connection to internal core failed: {}", e))?;
+
+    let mut stream = res.bytes_stream();
+    
+    while let Some(item) = stream.next().await {
+        let chunk = item.map_err(|e| e.to_string())?;
+        let text = String::from_utf8_lossy(&chunk);
+        
+        // Ollama can bundle multiple JSON objects in one chunk
+        for line in text.split('\n') {
+            if line.trim().is_empty() { continue; }
+            if let Ok(progress) = serde_json::from_str::<PullProgress>(line) {
+                let _ = window.emit("engine-sync-progress", &progress);
+            }
+        }
+    }
+
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn cancel_ai_request() {
     let mut handle_lock = ACTIVE_REQUEST.lock().unwrap();
@@ -290,26 +353,34 @@ async fn query_ollama(
 // -----------------------------------------------------------------------------
 // 6. Sidecar
 // -----------------------------------------------------------------------------
-use std::sync::atomic::{AtomicBool, Ordering};
-use tauri_plugin_shell::ShellExt;
+static OLLAMA_RUNNING: Mutex<Option<CommandChild>> = Mutex::new(None);
 
-static OLLAMA_RUNNING: AtomicBool = AtomicBool::new(false);
 pub fn start_ollama(app: &tauri::AppHandle) {
-    if OLLAMA_RUNNING.load(Ordering::Relaxed) {
+    let mut running = OLLAMA_RUNNING.lock().unwrap();
+    if running.is_some() {
         return;
     }
 
-    // Try to spawn sidecar, but don't panic if it fails (user might have system ollama)
+    // Try to spawn sidecar
     if let Ok(sidecar) = app.shell().sidecar("ollama") {
-        if let Ok(_) = sidecar.args(["serve"]).spawn() {
-            println!("Ollama sidecar started.");
-            OLLAMA_RUNNING.store(true, Ordering::Relaxed);
-        } else {
-            println!("Failed to spawn Ollama sidecar. Assuming system Ollama or manual start.");
+        match sidecar.args(["serve"]).spawn() {
+            Ok((_rx, child)) => {
+                println!("Internal core subsystem active.");
+                *running = Some(child);
+            }
+            Err(e) => {
+                println!("Subsystem activation bypassed: {}. Checking system environment.", e);
+            }
         }
     } else {
-        println!("Ollama sidecar binary not found. Assuming system Ollama or manual start.");
+        println!("Subsystem binary not found in sidecars. Checking system environment.");
     }
 }
 
-pub fn stop_ollama(_app: &tauri::AppHandle) {} // Sidecar dies with parent
+pub fn stop_ollama(_app: &tauri::AppHandle) {
+    let mut running = OLLAMA_RUNNING.lock().unwrap();
+    if let Some(child) = running.take() {
+        let _ = child.kill();
+        println!("Internal core subsystem terminated.");
+    }
+}

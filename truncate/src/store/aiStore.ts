@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 
 
 export interface AiMessage {
@@ -19,6 +20,13 @@ export interface AiStatus {
     message: string;
 }
 
+export interface EngineSyncProgress {
+    status: string;
+    digest?: string;
+    total?: number;
+    completed?: number;
+}
+
 interface AiStore {
     // State
     messages: AiMessage[];
@@ -27,9 +35,19 @@ interface AiStore {
     isThinking: boolean;
     error: string | null;
     abortController: AbortController | null;
+    showSetup: boolean;
+
+    // Sync State
+    isInstalled: boolean;
+    isSyncing: boolean;
+    syncProgress: EngineSyncProgress | null;
 
     // Actions
     checkStatus: () => Promise<void>;
+    checkIfInstalled: () => Promise<boolean>;
+    setShowSetup: (show: boolean) => void;
+    startSync: () => Promise<void>;
+    listenToEvents: () => Promise<() => void>;
     sendMessage: (text: string) => Promise<void>;
     cancelRequest: () => void;
     clearHistory: () => void;
@@ -43,6 +61,36 @@ export const useAiStore = create<AiStore>((set, get) => ({
     isThinking: false,
     error: null,
     abortController: null,
+    showSetup: false,
+    isInstalled: true,
+    isSyncing: false,
+    syncProgress: null,
+
+    checkIfInstalled: async () => {
+        const isInstalled = await invoke<boolean>('is_engine_installed');
+        set({ isInstalled });
+        return isInstalled;
+    },
+
+    setShowSetup: (show: boolean) => set({ showSetup: show }),
+
+    startSync: async () => {
+        set({ isSyncing: true, syncProgress: null });
+        try {
+            await invoke('sync_engine_assets');
+            set({ isSyncing: false, isInstalled: true });
+            await get().checkStatus();
+        } catch (e: any) {
+            set({ isSyncing: false, error: e.toString() });
+        }
+    },
+
+    listenToEvents: async () => {
+        const unlisten = await listen<EngineSyncProgress>('engine-sync-progress', (event) => {
+            set({ syncProgress: event.payload });
+        });
+        return unlisten;
+    },
 
     checkStatus: async () => {
         try {

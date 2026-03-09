@@ -51,23 +51,24 @@ impl DatabaseAdapter for MySqlAdapter {
             .acquire_timeout(self.acquire_timeout)
             .connect_with(self.config.clone())
             .await
-            .map_err(|e| format!("MySQL Connection failed: {}", e))?;
+            .map_err(|e| {
+                let err_msg = e.to_string();
+                if err_msg.contains("Access denied") {
+                    "Authentication failed: Invalid username or password.".to_string()
+                } else if err_msg.contains("Unknown database") {
+                    "The specified database does not exist.".to_string()
+                } else if err_msg.contains("Connection refused") || err_msg.contains("Network is unreachable") {
+                    "Connection refused: Ensure the database server is running and accessible at the specified host and port.".to_string()
+                } else {
+                    format!("MySQL Connection Error: {}", e)
+                }
+            })?;
             
         // Health check
         sqlx::query("SELECT 1")
             .execute(&pool)
             .await
-            .map_err(|e| {
-                if e.to_string().contains("Access denied") {
-                    "Authentication failed: Check your username and password".to_string()
-                } else if e.to_string().contains("Unknown database") {
-                    "Database does not exist".to_string()
-                } else if e.to_string().contains("Connection refused") {
-                    "Connection refused: Check host and port".to_string()
-                } else {
-                    format!("MySQL Connection failed: {}", e)
-                }
-            })?;
+            .map_err(|e| format!("MySQL health check failed: {}", e))?;
             
         self.pool = Some(pool);
         Ok(())
@@ -108,6 +109,7 @@ impl DatabaseAdapter for MySqlAdapter {
 
         self.pool = Some(pool);
         self.config = new_config;
+        self.conn_config.current_database = Some(db_name.to_string());
         
         Ok(true) // Reconnected
     }

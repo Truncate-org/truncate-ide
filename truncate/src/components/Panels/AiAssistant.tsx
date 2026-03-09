@@ -4,7 +4,7 @@ import { useAiStore } from '../../store/aiStore.ts';
 import { useDatabaseStore } from '../../store/databaseStore.ts';
 
 const AiAssistant: React.FC = () => {
-    const { messages, status, checkStatus, isThinking, modelStatus, cancelRequest } = useAiStore();
+    const { messages, status, checkStatus, isThinking, modelStatus, cancelRequest, isInstalled, setShowSetup } = useAiStore();
     const { runQuery } = useDatabaseStore();
     const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -51,55 +51,33 @@ const AiAssistant: React.FC = () => {
             {/* Initialization Overlay */}
             {status !== 'online' && (
                 <div className="flex-1 flex flex-col items-center justify-center p-6 text-center space-y-5 bg-panel">
-                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-indigo-500/30 flex items-center justify-center">
-                        <div className="w-5 h-5 rounded-full border-2 border-accent border-t-transparent animate-spin"></div>
-                    </div>
-                    <div className="space-y-2 max-w-xs">
-                        <h3 className="text-primary font-semibold text-sm">AI Assistant Offline</h3>
-                        <p className="text-secondary text-xs leading-relaxed">
-                            Truncate AI requires <span className="text-accent font-medium">Ollama</span> running locally with <span className="text-accent font-medium">qwen2.5-coder</span> model.
-                        </p>
-                    </div>
-
-                    {/* Setup Steps */}
-                    <div className="text-left w-full max-w-xs space-y-2">
-                        <div className="flex items-start gap-2.5 p-2.5 rounded-lg bg-subtle/20 border border-subtle/30">
-                            <span className="text-[10px] font-bold text-accent bg-accent/10 rounded w-4 h-4 flex items-center justify-center shrink-0 mt-0.5">1</span>
-                            <div>
-                                <p className="text-xs text-primary font-medium">Install Ollama</p>
-                                <p className="text-[10px] text-secondary mt-0.5">
-                                    <a href="https://ollama.com" target="_blank" rel="noreferrer" className="text-accent hover:underline">ollama.com</a> → Download & Install
+                    {!isInstalled ? (
+                        <div className="w-full max-w-xs space-y-4">
+                            <div className="p-4 rounded-xl bg-blue-500/5 border border-blue-500/10 text-left">
+                                <p className="text-xs text-secondary leading-relaxed mb-4">
+                                    The internal intelligence core is not initialized. We need to synchronize the required processing assets.
                                 </p>
+                                <button
+                                    onClick={() => setShowSetup(true)}
+                                    className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold uppercase tracking-wider rounded-lg transition-all shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+                                        <path fillRule="evenodd" d="M10 1a4.5 4.5 0 00-4.5 4.5V9H5a2 2 0 00-2 2v6a2 2 0 002 2h10a2 2 0 002-2v-6a2 2 0 00-2-2h-.5V5.5A4.5 4.5 0 0010 1zm3 8V5.5a3 3 0 10-6 0V9h6z" clipRule="evenodd" />
+                                    </svg>
+                                    Initialize Core Engine
+                                </button>
                             </div>
                         </div>
-                        <div className="flex items-start gap-2.5 p-2.5 rounded-lg bg-subtle/20 border border-subtle/30">
-                            <span className="text-[10px] font-bold text-accent bg-accent/10 rounded w-4 h-4 flex items-center justify-center shrink-0 mt-0.5">2</span>
-                            <div>
-                                <p className="text-xs text-primary font-medium">Pull the model</p>
-                                <code className="text-[10px] text-green-400 bg-black/30 px-1.5 py-0.5 rounded mt-1 block">ollama pull qwen2.5-coder</code>
+                    ) : (
+                        <div className="space-y-4">
+                            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-indigo-500/30 flex items-center justify-center mx-auto">
+                                <div className="w-5 h-5 rounded-full border-2 border-accent border-t-transparent animate-spin"></div>
                             </div>
-                        </div>
-                        <div className="flex items-start gap-2.5 p-2.5 rounded-lg bg-subtle/20 border border-subtle/30">
-                            <span className="text-[10px] font-bold text-accent bg-accent/10 rounded w-4 h-4 flex items-center justify-center shrink-0 mt-0.5">3</span>
-                            <div>
-                                <p className="text-xs text-primary font-medium">Ensure Ollama is running</p>
-                                <code className="text-[10px] text-green-400 bg-black/30 px-1.5 py-0.5 rounded mt-1 block">ollama serve</code>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Error + Retry */}
-                    {modelStatus?.message && (
-                        <div className="w-full max-w-xs">
-                            <p className="text-red-400 text-[10px] bg-red-500/10 px-3 py-1.5 rounded border border-red-500/20 truncate">{modelStatus.message}</p>
+                            <p className="text-secondary text-xs">Connecting to core subsystem...</p>
                         </div>
                     )}
-                    <button
-                        onClick={() => checkStatus()}
-                        className="px-4 py-1.5 text-xs font-medium text-accent border border-accent/30 rounded-lg hover:bg-accent/10 transition-colors"
-                    >
-                        ↻ Retry Connection
-                    </button>
+
+                    {/* Error + Retry Overlay could go here if status reports error */}
                 </div>
             )}
 

@@ -39,8 +39,17 @@ impl SqliteAdapter {
 #[async_trait]
 impl DatabaseAdapter for SqliteAdapter {
     async fn connect(&mut self) -> Result<(), String> {
-        if !Path::new(&self.file_path).exists() {
-             return Err(format!("File does not exist: {}", self.file_path));
+        if self.file_path.is_empty() {
+            return Err("No SQLite database file specified.".to_string());
+        }
+
+        let path = Path::new(&self.file_path);
+        if !path.exists() {
+             return Err(format!("The specified SQLite file does not exist: {}. Please check the file path.", self.file_path));
+        }
+        
+        if path.is_dir() {
+            return Err(format!("The specified path is a directory, not a file: {}.", self.file_path));
         }
 
         let options = SqliteConnectOptions::from_str(&format!("sqlite://{}", self.file_path))

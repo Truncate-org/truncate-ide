@@ -43,7 +43,11 @@ impl CsvAdapter {
 pub fn inspect_csv(path_str: &str) -> Result<CsvInspection, String> {
     let path = Path::new(path_str);
     if !path.exists() {
-        return Err(format!("File not found: {}", path_str));
+        return Err(format!("The specified CSV/TSV file was not found: {}. Verify the file exists and the path is correct.", path_str));
+    }
+
+    if path.is_dir() {
+        return Err(format!("Selected path is a directory, not a CSV file: {}.", path_str));
     }
 
     // Detect separator

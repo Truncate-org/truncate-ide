@@ -49,23 +49,24 @@ impl DatabaseAdapter for PostgresAdapter {
             .acquire_timeout(self.acquire_timeout)
             .connect_with(self.config.clone())
             .await
-            .map_err(|e| format!("PostgreSQL Connection failed: {}", e))?;
+            .map_err(|e| {
+                let err_msg = e.to_string();
+                if err_msg.contains("password authentication failed") {
+                    "Authentication failed: Invalid password or username.".to_string()
+                } else if err_msg.contains("database") && err_msg.contains("does not exist") {
+                    "The specified database does not exist.".to_string()
+                } else if err_msg.contains("Connection refused") || err_msg.contains("Network is unreachable") {
+                    "Connection refused: Ensure the PostgreSQL server is running and accessible.".to_string()
+                } else {
+                    format!("PostgreSQL Connection Error: {}", e)
+                }
+            })?;
             
         // Health check
         sqlx::query("SELECT 1")
             .execute(&pool)
             .await
-            .map_err(|e| {
-                 if e.to_string().contains("password authentication failed") {
-                     "Authentication failed: Check your password".to_string()
-                 } else if e.to_string().contains("does not exist") {
-                     "Database does not exist".to_string()
-                 } else if e.to_string().contains("Connection refused") {
-                     "Connection refused: Check host and port".to_string()
-                 } else {
-                     format!("Connection error: {}", e)
-                 }
-            })?;
+            .map_err(|e| format!("PostgreSQL health check failed: {}", e))?;
             
         self.pool = Some(pool);
         Ok(())

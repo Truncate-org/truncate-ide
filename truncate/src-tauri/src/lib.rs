@@ -257,10 +257,17 @@ pub fn run() {
             inspect_csv,
             ai_copilot::ask_copilot,
             ai_copilot::check_ai_status,
+            ai_copilot::is_engine_installed,
+            ai_copilot::sync_engine_assets,
             ai_copilot::ask_audit_ai,
             run_data_profiling
         ])
 
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app_handle, event| {
+            if let tauri::RunEvent::Exit = event {
+                ai_copilot::stop_ollama(app_handle);
+            }
+        });
 }

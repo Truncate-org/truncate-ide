@@ -185,6 +185,11 @@ function TerminalPanelInner({ readOnly = true, setReadOnly: _setReadOnly = () =>
             }
 
             // Send Enter to PTY — the CLI handles execution
+            // To prevent double-echoing (since we manually write in onData and PTY echoes back),
+            // we first "clear" the local line in the terminal UI and then send.
+            if (currentLine.length > 0) {
+                term.write('\r\x1b[K'); // Carriage return and clear line
+            }
             await sendToPty(currentLine + '\x0D');
 
             // Reset buffers
@@ -195,6 +200,9 @@ function TerminalPanelInner({ readOnly = true, setReadOnly: _setReadOnly = () =>
             // Incomplete statement — multiline: send Enter to PTY (CLI shows continuation prompt)
             multilineBufferRef.current = fullBuffer;
 
+            if (currentLine.length > 0) {
+                term.write('\r\x1b[K');
+            }
             await sendToPty(currentLine + '\x0D');
 
             inputBufferRef.current = '';
@@ -480,11 +488,12 @@ function TerminalPanelInner({ readOnly = true, setReadOnly: _setReadOnly = () =>
                 activeDatabase !== lastSyncedDbRef.current) {
                 console.log(`[Terminal] Switching context to: ${activeDatabase}`);
 
-                if (connectionType === 'postgres') {
+                if (connectionType === 'postgres' || connectionType === 'mysql') {
                     if (xtermRef.current) {
                         xtermRef.current.options.disableStdin = true;
                         xtermRef.current.clear();
-                        xtermRef.current.write(`\r\n\x1b[34m[IDE] Switching database context to "${activeDatabase}"...\x1b[0m\r\n`);
+                        const dbPrefix = connectionType === 'postgres' ? 'PostgreSQL' : 'MySQL';
+                        xtermRef.current.write(`\r\n\x1b[34m[IDE] Switching ${dbPrefix} context to "${activeDatabase}"...\x1b[0m\r\n`);
                     }
                     invoke('start_terminal_auto', { id: instanceIdRef.current }).then(() => {
                         if (xtermRef.current) {
@@ -496,9 +505,6 @@ function TerminalPanelInner({ readOnly = true, setReadOnly: _setReadOnly = () =>
                         xtermRef.current?.write(`\r\n\x1b[31mFailed to switch terminal context: ${e}\x1b[0m\r\n`);
                         if (xtermRef.current) xtermRef.current.options.disableStdin = false;
                     });
-                } else if (connectionType === 'mysql') {
-                    invoke('write_terminal', { id: instanceIdRef.current, data: `USE ${activeDatabase};\x0D` });
-                    lastSyncedDbRef.current = activeDatabase;
                 } else {
                     // SQLite / CSV have 1 file per connection, DB "switching" is handled differently or unnecessary
                     lastSyncedDbRef.current = activeDatabase;

@@ -46,7 +46,7 @@ pub async fn start_terminal_auto(
     match config.db_type {
         ConnectionType::MySQL => {
             bin = "mysql".to_string();
-            // mysql -h host -P port -u user -pPASS
+            // mysql -h host -P port -u user -pPASS [database]
             args.push("-h".to_string());
             args.push(config.host.clone());
             args.push("-P".to_string());
@@ -56,6 +56,10 @@ pub async fn start_terminal_auto(
             
             if !config.pass.is_empty() {
                 args.push(format!("-p{}", config.pass)); 
+            }
+
+            if let Some(db_name) = config.current_database {
+                args.push(db_name);
             }
         },
         ConnectionType::PostgreSQL => {

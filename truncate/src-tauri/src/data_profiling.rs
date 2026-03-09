@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use crate::adapter::DatabaseAdapter;
+use crate::adapter::{DatabaseAdapter, ConnectionType};
 use crate::types::QueryResult;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -26,13 +26,22 @@ pub struct TableProfile {
 }
 
 pub async fn profile_table(adapter: &impl DatabaseAdapter, table: &str) -> Result<TableProfile, String> {
+    let db_type = adapter.get_connection_config().db_type;
+    let q = match db_type {
+        ConnectionType::MySQL => '`',
+        _ => '"',
+    };
+    let real_type = match db_type {
+        ConnectionType::MySQL => "DOUBLE",
+        _ => "REAL",
+    };
+
     // 1. Get Schema / Columns
-    // Actually adapter.list_columns is better if available, but QueryResult from select works
     let preview = adapter.preview_table(table).await?; 
     let col_names: Vec<String> = preview.columns.iter().map(|c| c.name.clone()).collect();
     
     // 2. Count Total Rows
-    let count_query = format!("SELECT COUNT(*) FROM {}", table);
+    let count_query = format!("SELECT COUNT(*) FROM {q}{table}{q}");
     let count_res = adapter.execute_query(&count_query).await?;
     let total_rows = if let QueryResult::ResultSet(rs) = count_res {
         rs.rows.first().and_then(|r| r.first()).and_then(|v| v.parse::<i64>().ok()).unwrap_or(0)
@@ -44,8 +53,8 @@ pub async fn profile_table(adapter: &impl DatabaseAdapter, table: &str) -> Resul
     for col in &col_names {
         // Null Analysis
         let null_query = format!(
-            "SELECT COUNT(*) FROM {} WHERE \"{}\" IS NULL OR \"{}\" = ''", 
-            table, col, col
+            "SELECT COUNT(*) FROM {q}{table}{q} WHERE {q}{col}{q} IS NULL OR {q}{col}{q} = ''", 
+            table = table, col = col, q = q
         );
         let null_res = adapter.execute_query(&null_query).await?;
         let null_count = if let QueryResult::ResultSet(rs) = null_res {
@@ -57,23 +66,17 @@ pub async fn profile_table(adapter: &impl DatabaseAdapter, table: &str) -> Resul
         } else { 0.0 };
 
         // Distinct / Unique
-        let distinct_query = format!("SELECT COUNT(DISTINCT \"{}\") FROM {}", col, table);
+        let distinct_query = format!("SELECT COUNT(DISTINCT {q}{col}{q}) FROM {q}{table}{q}", q = q, col = col, table = table);
         let distinct_res = adapter.execute_query(&distinct_query).await?;
         let distinct_count = if let QueryResult::ResultSet(rs) = distinct_res {
             rs.rows.first().and_then(|r| r.first()).and_then(|v| v.parse::<i64>().ok()).unwrap_or(0)
         } else { 0 };
 
-        // Numeric Stats (Min, Max, Avg) - Only attempt if it looks numeric?
-        // For RAW staging, everything is TEXT. So we try to cast.
-        // SQLite: Cast(col as Real)
-        
         // Numeric Stats & Outlier Analysis
-        // For SQLite (and others), we can estimate StdDev via Variance = Avg(x^2) - Avg(x)^2
-        // We filter for non-null and non-empty values.
         let stats_query = format!(
-            "SELECT COUNT(*), MIN(CAST(\"{}\" as REAL)), MAX(CAST(\"{}\" as REAL)), AVG(CAST(\"{}\" as REAL)), AVG(CAST(\"{}\" as REAL) * CAST(\"{}\" as REAL)) \
-             FROM {} WHERE \"{}\" IS NOT NULL AND \"{}\" != ''", 
-            col, col, col, col, col, table, col, col
+            "SELECT COUNT(*), MIN(CAST({q}{col}{q} as {rt})), MAX(CAST({q}{col}{q} as {rt})), AVG(CAST({q}{col}{q} as {rt})), AVG(CAST({q}{col}{q} as {rt}) * CAST({q}{col}{q} as {rt})) \
+             FROM {q}{table}{q} WHERE {q}{col}{q} IS NOT NULL AND {q}{col}{q} != ''", 
+            col = col, q = q, rt = real_type, table = table
         );
 
         let mut min_val: Option<String> = None;
@@ -85,10 +88,8 @@ pub async fn profile_table(adapter: &impl DatabaseAdapter, table: &str) -> Resul
 
         if let Ok(QueryResult::ResultSet(rs)) = adapter.execute_query(&stats_query).await {
              if let Some(row) = rs.rows.first() {
-                 // row: [count, min, max, avg, avg_sq]
                  let count_num: i64 = row.get(0).and_then(|v| v.parse().ok()).unwrap_or(0);
                  
-                 // If we have enough numeric values, treat as potential number for outlier check
                  if count_num > 0 {
                      min_val = row.get(1).cloned();
                      max_val = row.get(2).cloned();
@@ -101,21 +102,17 @@ pub async fn profile_table(adapter: &impl DatabaseAdapter, table: &str) -> Resul
                      mean_val = Some(avg);
                      std_dev_val = Some(std_dev);
                      
-                     // If StdDev > 0, we can check for outliers (Z-Score > 3)
                      if std_dev > 0.0 {
                          let outlier_query = format!(
-                             "SELECT COUNT(*) FROM {} WHERE ABS(CAST(\"{}\" as REAL) - {}) > {}",
-                             table, col, avg, 3.0 * std_dev
+                             "SELECT COUNT(*) FROM {q}{table}{q} WHERE ABS(CAST({q}{col}{q} as {rt}) - {}) > {}",
+                             avg, 3.0 * std_dev, q = q, table = table, col = col, rt = real_type
                          );
                          if let Ok(QueryResult::ResultSet(ors)) = adapter.execute_query(&outlier_query).await {
                              outliers_count = ors.rows.first().and_then(|r| r.first())
-                                 .and_then(|v| v.parse().ok()).unwrap_or(0);
+                                  .and_then(|v| v.parse().ok()).unwrap_or(0);
                          }
                      }
                      
-                     // Simple Type Refinement
-                     // If numeric count is close to total non-null count (calculated separately or roughly here), set type
-                     // For now, if we got valid stats, let's call it REAL or INTEGER (heuristic)
                      inferred_type = "NUMERIC".to_string(); 
                  }
              }
@@ -137,10 +134,7 @@ pub async fn profile_table(adapter: &impl DatabaseAdapter, table: &str) -> Resul
     }
 
     // 4. Duplicate Check
-    // Calculate Total Rows vs Count of Distinct Rows
-    // Since "DISTINCT *" might be heavy, we can try to construct a query.
-    // SQLite: SELECT COUNT(*) FROM (SELECT DISTINCT * FROM table)
-    let distinct_rows_query = format!("SELECT COUNT(*) FROM (SELECT DISTINCT * FROM {})", table);
+    let distinct_rows_query = format!("SELECT COUNT(*) FROM (SELECT DISTINCT * FROM {q}{table}{q}) as sub", q = q, table = table);
     let mut duplicates_count = 0;
     
     if let Ok(QueryResult::ResultSet(rs)) = adapter.execute_query(&distinct_rows_query).await {
