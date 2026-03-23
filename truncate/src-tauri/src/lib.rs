@@ -14,6 +14,9 @@ pub mod schema;
 pub mod terminal;
 pub mod ai_copilot;
 pub mod data_profiling;
+pub mod keychain;
+pub mod api_proxy;
+pub mod subscription;
 
 
 use crate::db_state::DbState;
@@ -260,7 +263,12 @@ pub fn run() {
             ai_copilot::is_engine_installed,
             ai_copilot::sync_engine_assets,
             ai_copilot::ask_audit_ai,
-            run_data_profiling
+            run_data_profiling,
+            keychain::set_keychain_token,
+            keychain::get_keychain_token,
+            keychain::delete_keychain_token,
+            api_proxy::api_proxy,
+            subscription::get_subscription_status
         ])
 
         .build(tauri::generate_context!())

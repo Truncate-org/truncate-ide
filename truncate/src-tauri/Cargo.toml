@@ -37,5 +37,6 @@ futures-util = "0.3"
 rust_decimal = "1.40.0"
 chrono = "0.4.43"
 uuid = "1.21.0"
+keyring = "3.2"
 
 

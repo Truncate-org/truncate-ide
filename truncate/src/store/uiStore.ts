@@ -8,6 +8,7 @@ interface UiStore {
     showTerminal: boolean;
     showAssistant: boolean;
     showDataAudit: boolean; // New Panel
+    showSettings: boolean; // Settings Modal
     // Theme
     theme: 'default' | 'void-minimal';
 
@@ -25,6 +26,7 @@ interface UiStore {
     toggleTerminal: () => void;
     toggleAssistant: () => void;
     toggleDataAudit: () => void; // New Action
+    toggleSettings: () => void;
     setActiveRightTab: (tab: 'ai' | 'audit') => void;
     toggleTheme: () => void;
     setExplorerSize: (size: number) => void;
@@ -41,6 +43,7 @@ export const useUiStore = create<UiStore>()(
             showTerminal: true,
             showAssistant: true,
             showDataAudit: false, // Default hidden
+            showSettings: false,
             activeRightTab: 'ai',
             theme: 'default',
 
@@ -70,6 +73,8 @@ export const useUiStore = create<UiStore>()(
                     activeRightTab: 'audit'
                 };
             }),
+
+            toggleSettings: () => set((state) => ({ showSettings: !state.showSettings })),
 
             setActiveRightTab: (tab: 'ai' | 'audit') => set({ activeRightTab: tab }),
 

@@ -3,6 +3,7 @@ import ResizableLayout from "./components/Layout/ResizableLayout";
 import { useUiStore } from "./store/uiStore";
 import { useAiStore } from "./store/aiStore";
 import EngineSetupScreen from "./components/Modals/EngineSetupScreen";
+import SettingsModal from "./components/Modals/SettingsModal";
 
 function App() {
   const theme = useUiStore((state) => state.theme);
@@ -30,6 +31,7 @@ function App() {
     <>
       <ResizableLayout />
       <EngineSetupScreen />
+      <SettingsModal />
     </>
   );
 }

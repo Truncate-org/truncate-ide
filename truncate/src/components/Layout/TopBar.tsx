@@ -122,7 +122,11 @@ const TopBar: React.FC = () => {
                 >
                     <Layout className="w-4 h-4" />
                 </button>
-                <button className="text-[#858585] hover:text-[#cccccc] p-1.5 rounded hover:bg-[#2d2d2d] transition-colors" title="Settings">
+                <button 
+                    onClick={useUiStore(s => s.toggleSettings)}
+                    className="text-[#858585] hover:text-[#cccccc] p-1.5 rounded hover:bg-[#2d2d2d] transition-colors" 
+                    title="Settings"
+                >
                     <Settings className="w-4 h-4" />
                 </button>
             </div>
