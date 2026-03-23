@@ -20,6 +20,7 @@ pub struct ProxyResponse {
 pub async fn api_proxy(
     mut request: ProxyRequest,
 ) -> Result<ProxyResponse, String> {
+    println!("Proxy Request: {} {}", request.method, request.url);
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(10))
         .build()
@@ -140,6 +141,7 @@ pub async fn api_proxy(
         Ok(response) => {
             let status = response.status().as_u16();
             let data: Value = response.json().await.unwrap_or(Value::Null);
+            println!("Proxy Response Status: {}. Data: {}", status, serde_json::to_string(&data).unwrap_or("{}".to_string()).chars().take(200).collect::<String>());
 
             // Path 1: Successful but 401 (e.g. password mismatch or backend sync issue)
             if status == 401 && (target_url.contains("/auth/login") || target_url.contains("/auth/subscription")) {

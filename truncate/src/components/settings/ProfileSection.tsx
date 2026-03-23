@@ -15,11 +15,18 @@ import {
 import clsx from "clsx";
 
 const ProfileSection: React.FC = () => {
-  const { user, subscription } = useAuthStore();
-  const { logout, refresh } = useAuth();
+  const { user, subscription, isAuthenticated } = useAuthStore();
+  const { logout, refresh, verify } = useAuth();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+
+  console.log("ProfileSection State Check:", { 
+    hasUser: !!user, 
+    hasSub: !!subscription, 
+    isAuthenticated,
+    userValue: user
+  });
 
   useEffect(() => {
     const fetchStatus = async () => {
@@ -36,6 +43,7 @@ const ProfileSection: React.FC = () => {
   }, [subscription?.expires_at]);
 
   const handleRefresh = async () => {
+    console.log("Manual refresh requested...");
     setIsRefreshing(true);
     await refresh();
     setTimeout(() => setIsRefreshing(false), 800);
@@ -54,8 +62,24 @@ const ProfileSection: React.FC = () => {
     return (
       <div className="flex flex-col items-center justify-center h-full text-center gap-4 opacity-50">
         <UserIcon className="w-12 h-12" />
-        <p className="text-sm font-medium">Session information unavailable.</p>
-        <button onClick={() => window.location.reload()} className="text-[11px] underline">Reload Application</button>
+        <div className="flex flex-col gap-1">
+          <p className="text-sm font-medium">Session information unavailable.</p>
+          <p className="text-[10px] text-gray-500">Auth state: {isAuthenticated ? "Authenticated" : "Not authenticated"}</p>
+        </div>
+        <div className="flex gap-4">
+          <button 
+            onClick={() => verify()} 
+            className="px-4 py-2 bg-blue-600/20 text-blue-400 rounded-md text-xs font-bold hover:bg-blue-600/40 transition-all border border-blue-500/30"
+          >
+            Reconnect Session
+          </button>
+          <button 
+            onClick={() => window.location.reload()} 
+            className="px-4 py-2 bg-white/5 text-gray-400 rounded-md text-xs font-bold hover:bg-white/10 transition-all border border-white/10"
+          >
+            Reload UI
+          </button>
+        </div>
       </div>
     );
   }

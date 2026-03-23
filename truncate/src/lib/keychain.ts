@@ -13,36 +13,37 @@ export const keychain = {
    */
   async setToken(token: string): Promise<void> {
     try {
+      // 1. Try OS Keychain first
       await invoke("set_keychain_token", { token });
-      localStorage.removeItem("truncate_fallback_token"); // Cleanup fallback if successful
+      console.log("Token saved to OS Keychain");
+      localStorage.removeItem("truncate_auth_token"); // Cleanup fallback
     } catch (error) {
       console.warn("Failed to set keychain token, using fallback storage:", error);
-      localStorage.setItem("truncate_fallback_token", token);
+      localStorage.setItem("truncate_auth_token", token);
     }
   },
 
-  /**
-   * Retrieves the auth token.
-   */
-  async getToken(): Promise<string | null> {
+  getToken: async () => {
     try {
-      const token = await invoke<string | null>("get_keychain_token");
-      if (token) return token;
-    } catch (error) {
-      console.warn("Failed to get keychain token, checking fallback:", error);
+      // 1. Try OS Keychain first
+      const osToken = await invoke<string>("get_keychain_token");
+      if (osToken) return osToken;
+    } catch (err) {
+      console.warn("Keychain retrieval failed, trying fallback:", err);
     }
-    return localStorage.getItem("truncate_fallback_token");
+
+    // 2. Fall back to localStorage
+    const fallbackToken = localStorage.getItem("truncate_auth_token");
+    console.log("Fallback token check:", !!fallbackToken);
+    return fallbackToken;
   },
 
-  /**
-   * Deletes the auth token from the OS Keychain.
-   */
-  async deleteToken(): Promise<void> {
+  deleteToken: async () => {
     try {
-      localStorage.removeItem("truncate_fallback_token");
       await invoke("delete_keychain_token");
-    } catch (error) {
-      console.error("Failed to delete keychain token:", error);
+    } catch (err) {
+      console.warn("Failed to delete keychain token:", err);
     }
+    localStorage.removeItem("truncate_auth_token");
   },
 };

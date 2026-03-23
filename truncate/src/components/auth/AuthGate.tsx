@@ -1,8 +1,8 @@
 import React, { useEffect } from "react";
-import { useAuthStore } from "../../store/authStore";
+import { useAuthStore } from "../../store/authStore"; // Auth state management
 import { useAuth } from "../../hooks/useAuth";
 import LoginScreen from "./LoginScreen";
-import CreditsExhausted from "./CreditsExhausted";
+import CreditsExhausted from "./CreditsExhausted.tsx";
 import { Loader2 } from "lucide-react";
 
 interface AuthGateProps {
@@ -18,9 +18,12 @@ const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
   } = useAuthStore();
 
   useEffect(() => {
+    console.log("AuthGate: Initiating verify...");
     verify();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  console.log("AuthGate Rendering:", { isAuthenticated, isInitialLoading, hasSub: !!subscription });
 
   // 1. Startup Loading State
   if (isInitialLoading) {
