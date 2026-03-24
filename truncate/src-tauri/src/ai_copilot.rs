@@ -169,10 +169,7 @@ pub struct PullProgress {
 #[tauri::command]
 pub async fn is_engine_installed(app: tauri::AppHandle) -> bool {
     // Check if sidecar exists
-    let sidecar_exists = match app.shell().sidecar("ollama") {
-        Ok(_) => true,
-        Err(_) => false,
-    };
+    let sidecar_exists = app.shell().sidecar("ollama").is_ok();
 
     if sidecar_exists {
         return true;

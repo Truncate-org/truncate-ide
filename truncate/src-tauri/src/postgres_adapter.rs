@@ -143,18 +143,14 @@ impl DatabaseAdapter for PostgresAdapter {
             normalized_sql.pop();
         }
         
-        if let Err(e) = validate_sql_structure(&normalized_sql, &sql_type) {
-            return Err(e);
-        }
+        validate_sql_structure(&normalized_sql, &sql_type)?;
 
         let mut final_sql = normalized_sql.clone();
         let mut was_limited = false;
 
-        if sql_type == SqlType::Select {
-            if !has_limit_clause(&normalized_sql) {
-                final_sql.push_str(" LIMIT 1000");
-                was_limited = true;
-            }
+        if sql_type == SqlType::Select && !has_limit_clause(&normalized_sql) {
+            final_sql.push_str(" LIMIT 1000");
+            was_limited = true;
         }
 
         let rows: Vec<PgRow> = sqlx::query(&final_sql)

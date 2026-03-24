@@ -7,6 +7,12 @@ pub struct DbState {
 
 impl DbState {
     pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+impl Default for DbState {
+    fn default() -> Self {
         Self {
             adapter: Mutex::new(None),
         }

@@ -1,0 +1,221 @@
+    Checking truncate v0.1.0 (/Users/yaannko/Desktop/my_projects/truncate-ide/truncate/src-tauri)
+error: this block may be rewritten with the `?` operator
+   --> src/mysql_adapter.rs:160:9
+    |
+160 | /         if let Err(e) = validate_sql_structure(&normalized_sql, &sql_typ...
+161 | |             return Err(e);
+162 | |         }
+    | |_________^ help: replace it with: `validate_sql_structure(&normalized_sql, &sql_type)?;`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#question_mark
+    = note: `-D clippy::question-mark` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::question_mark)]`
+
+error: this `if` statement can be collapsed
+   --> src/mysql_adapter.rs:167:9
+    |
+167 | /         if sql_type == SqlType::Select {
+168 | |             if !has_limit_clause(&normalized_sql) {
+169 | |                 final_sql.push_str(" LIMIT 1000");
+170 | |                 was_limited = true;
+171 | |             }
+172 | |         }
+    | |_________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#collapsible_if
+    = note: `-D clippy::collapsible-if` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::collapsible_if)]`
+help: collapse nested if block
+    |
+167 ~         if sql_type == SqlType::Select
+168 ~             && !has_limit_clause(&normalized_sql) {
+169 |                 final_sql.push_str(" LIMIT 1000");
+170 |                 was_limited = true;
+171 ~             }
+    |
+
+error: this `if` statement can be collapsed
+   --> src/csv_adapter.rs:210:40
+    |
+210 |   ...   } else if expected_type == "REAL" {
+    |  ______________^
+211 | | ...       if val.parse::<f64>().is_err() {
+212 | | ...           error = Some(format!("Type mismatch in col {}: expected RE...
+213 | | ...           break;
+214 | | ...       }
+215 | | ...   }
+    | |_______^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#collapsible_if
+help: collapse nested if block
+    |
+210 ~                                 } else if expected_type == "REAL"
+211 ~                                     && val.parse::<f64>().is_err() {
+212 |                                         error = Some(format!("Type mismatch in col {}: expected REAL, got '{}'", config_clone.columns[i], val));
+213 |                                         break;
+214 ~                                     }
+    |
+
+error: calling `push_str()` using a single-character string literal
+   --> src/csv_adapter.rs:278:21
+    |
+278 |                     insert_sql.push_str(")");
+    |                     ^^^^^^^^^^^^^^^^^^^^^^^^ help: consider using `push` with a character literal: `insert_sql.push(')')`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#single_char_add_str
+    = note: `-D clippy::single-char-add-str` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::single_char_add_str)]`
+
+error: this block may be rewritten with the `?` operator
+   --> src/postgres_adapter.rs:146:9
+    |
+146 | /         if let Err(e) = validate_sql_structure(&normalized_sql, &sql_typ...
+147 | |             return Err(e);
+148 | |         }
+    | |_________^ help: replace it with: `validate_sql_structure(&normalized_sql, &sql_type)?;`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#question_mark
+
+error: this `if` statement can be collapsed
+   --> src/postgres_adapter.rs:153:9
+    |
+153 | /         if sql_type == SqlType::Select {
+154 | |             if !has_limit_clause(&normalized_sql) {
+155 | |                 final_sql.push_str(" LIMIT 1000");
+156 | |                 was_limited = true;
+157 | |             }
+158 | |         }
+    | |_________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#collapsible_if
+help: collapse nested if block
+    |
+153 ~         if sql_type == SqlType::Select
+154 ~             && !has_limit_clause(&normalized_sql) {
+155 |                 final_sql.push_str(" LIMIT 1000");
+156 |                 was_limited = true;
+157 ~             }
+    |
+
+error: this `if` statement can be collapsed
+   --> src/sqlite_adapter.rs:119:9
+    |
+119 | /         if sql_type == SqlType::Select {
+120 | |             if !has_limit_clause(&normalized_sql) {
+121 | |                 final_sql.push_str(" LIMIT 1000");
+122 | |                 was_limited = true;
+123 | |             }
+124 | |         }
+    | |_________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#collapsible_if
+help: collapse nested if block
+    |
+119 ~         if sql_type == SqlType::Select
+120 ~             && !has_limit_clause(&normalized_sql) {
+121 |                 final_sql.push_str(" LIMIT 1000");
+122 |                 was_limited = true;
+123 ~             }
+    |
+
+error: you should consider adding a `Default` implementation for `DbState`
+  --> src/db_state.rs:9:5
+   |
+ 9 | /     pub fn new() -> Self {
+10 | |         Self {
+11 | |             adapter: Mutex::new(None),
+12 | |         }
+13 | |     }
+   | |_____^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#new_without_default
+   = note: `-D clippy::new-without-default` implied by `-D warnings`
+   = help: to override `-D warnings` add `#[allow(clippy::new_without_default)]`
+help: try adding this
+   |
+ 8 + impl Default for DbState {
+ 9 +     fn default() -> Self {
+10 +         Self::new()
+11 +     }
+12 + }
+   |
+
+error: calling `push_str()` using a single-character string literal
+  --> src/schema.rs:92:9
+   |
+92 |         md.push_str("\n");
+   |         ^^^^^^^^^^^^^^^^^ help: consider using `push` with a character literal: `md.push('\n')`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#single_char_add_str
+
+error: calling `push_str()` using a single-character string literal
+   --> src/schema.rs:102:13
+    |
+102 |             md.push_str("\n");
+    |             ^^^^^^^^^^^^^^^^^ help: consider using `push` with a character literal: `md.push('\n')`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#single_char_add_str
+
+error: writing `&PathBuf` instead of `&Path` involves a new object where a slice will do
+   --> src/schema.rs:126:16
+    |
+126 |     base_path: &PathBuf,
+    |                ^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#ptr_arg
+    = note: `-D clippy::ptr-arg` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::ptr_arg)]`
+help: change this to
+    |
+126 ~     base_path: &Path,
+127 |     app_handle: &tauri::AppHandle,
+...
+130 |     let folder_name = format!("Truncate_Export_{}", schema.database_name);
+131 ~     let mut export_dir = base_path.to_path_buf();
+    |
+
+error: you should consider adding a `Default` implementation for `TerminalState`
+  --> src/terminal.rs:20:5
+   |
+20 | /     pub fn new() -> Self {
+21 | |         Self {
+22 | |             sessions: Arc::new(Mutex::new(HashMap::new())),
+23 | |         }
+24 | |     }
+   | |_____^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#new_without_default
+help: try adding this
+   |
+19 + impl Default for TerminalState {
+20 +     fn default() -> Self {
+21 +         Self::new()
+22 +     }
+23 + }
+   |
+
+error: redundant pattern matching, consider using `is_ok()`
+   --> src/ai_copilot.rs:172:26
+    |
+172 |       let sidecar_exists = match app.shell().sidecar("ollama") {
+    |  __________________________^
+173 | |         Ok(_) => true,
+174 | |         Err(_) => false,
+175 | |     };
+    | |_____^ help: try: `app.shell().sidecar("ollama").is_ok()`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#redundant_pattern_matching
+    = note: `-D clippy::redundant-pattern-matching` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::redundant_pattern_matching)]`
+
+error: accessing first element with `row.get(0)`
+  --> src/data_profiling.rs:91:39
+   |
+91 | ...   let count_num: i64 = row.get(0).and_then(|v| v.parse().ok()).unwrap_o...
+   |                            ^^^^^^^^^^ help: try: `row.first()`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#get_first
+   = note: `-D clippy::get-first` implied by `-D warnings`
+   = help: to override `-D warnings` add `#[allow(clippy::get_first)]`
+
+error: could not compile `truncate` (lib) due to 14 previous errors

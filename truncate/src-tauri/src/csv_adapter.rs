@@ -207,11 +207,9 @@ impl DatabaseAdapter for CsvAdapter {
                                         error = Some(format!("Type mismatch in col {}: expected INTEGER, got '{}'", config_clone.columns[i], val));
                                         break;
                                     }
-                                } else if expected_type == "REAL" {
-                                    if val.parse::<f64>().is_err() {
-                                        error = Some(format!("Type mismatch in col {}: expected REAL, got '{}'", config_clone.columns[i], val));
-                                        break;
-                                    }
+                                } else if expected_type == "REAL" && val.parse::<f64>().is_err() {
+                                    error = Some(format!("Type mismatch in col {}: expected REAL, got '{}'", config_clone.columns[i], val));
+                                    break;
                                 }
                             }
                         }
@@ -275,7 +273,7 @@ impl DatabaseAdapter for CsvAdapter {
                         insert_sql.push_str("?,");
                     }
                     insert_sql.pop(); // remove last comma
-                    insert_sql.push_str(")");
+                    insert_sql.push(')');
                     
                     let mut query = sqlx::query(&insert_sql);
                     for val in row {

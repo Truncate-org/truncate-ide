@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use std::fs;
-use std::path::PathBuf;
+
 use std::process::Command;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -73,7 +73,8 @@ pub fn generate_dot(schema: &Schema) -> String {
 
 pub fn generate_markdown_summary(schema: &Schema) -> String {
     let mut md = String::new();
-    md.push_str(&format!("# Database Schema: {}\n\n", schema.database_name));
+    md.push_str(&format!("# Database Schema: {}\n", schema.database_name));
+    md.push('\n');
     md.push_str("## Overview\n");
     md.push_str(&format!("- **Total Tables**: {}\n", schema.tables.len()));
 
@@ -89,7 +90,7 @@ pub fn generate_markdown_summary(schema: &Schema) -> String {
                 col.name, col.data_type, col.is_nullable, key
             ));
         }
-        md.push_str("\n");
+        md.push('\n');
 
         if !table.foreign_keys.is_empty() {
             md.push_str("**Foreign Keys**:\n");
@@ -99,7 +100,7 @@ pub fn generate_markdown_summary(schema: &Schema) -> String {
                     fk.column_name, fk.ref_table, fk.ref_column
                 ));
             }
-            md.push_str("\n");
+            md.push('\n');
         }
     }
 
@@ -123,12 +124,12 @@ pub struct ExportResult {
 
 pub fn save_schema_files(
     schema: &Schema,
-    base_path: &PathBuf,
+    base_path: &std::path::Path,
     app_handle: &tauri::AppHandle,
 ) -> Result<ExportResult, String> {
     // Create a subdirectory for the export
     let folder_name = format!("Truncate_Export_{}", schema.database_name);
-    let mut export_dir = base_path.clone();
+    let mut export_dir = base_path.to_path_buf();
     export_dir.push(&folder_name);
 
     if !export_dir.exists() {
@@ -142,14 +143,9 @@ pub fn save_schema_files(
     let dot_content = generate_dot(schema);
     let md_content = generate_markdown_summary(schema);
 
-    let mut json_path = export_dir.clone();
-    json_path.push(format!("{}_schema.json", schema.database_name));
-
-    let mut dot_path = export_dir.clone();
-    dot_path.push(format!("{}_doc.dot", schema.database_name));
-
-    let mut md_path = export_dir.clone();
-    md_path.push(format!("{}_doc.md", schema.database_name));
+    let json_path = export_dir.join(format!("{}_schema.json", schema.database_name));
+    let dot_path = export_dir.join(format!("{}_doc.dot", schema.database_name));
+    let md_path = export_dir.join(format!("{}_doc.md", schema.database_name));
 
     fs::write(&json_path, json_content).map_err(|e| format!("Failed to write JSON: {}", e))?;
 
@@ -158,8 +154,7 @@ pub fn save_schema_files(
     fs::write(&md_path, &md_content).map_err(|e| format!("Failed to write Markdown: {}", e))?;
 
     // Attempt SVG generation using Bundled Resource
-    let mut svg_path_buf = export_dir.clone();
-    svg_path_buf.push(format!("{}_diagram.svg", schema.database_name));
+    let svg_path_buf = export_dir.join(format!("{}_diagram.svg", schema.database_name));
     let svg_path_str = svg_path_buf.to_string_lossy().to_string();
 
     // Resolve resource path

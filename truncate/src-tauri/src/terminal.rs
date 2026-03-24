@@ -18,6 +18,12 @@ pub struct TerminalState {
 
 impl TerminalState {
     pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+impl Default for TerminalState {
+    fn default() -> Self {
         Self {
             sessions: Arc::new(Mutex::new(HashMap::new())),
         }

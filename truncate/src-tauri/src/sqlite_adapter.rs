@@ -116,11 +116,9 @@ impl DatabaseAdapter for SqliteAdapter {
         let mut final_sql = normalized_sql.clone();
         let mut was_limited = false;
 
-        if sql_type == SqlType::Select {
-            if !has_limit_clause(&normalized_sql) {
-                final_sql.push_str(" LIMIT 1000");
-                was_limited = true;
-            }
+        if sql_type == SqlType::Select && !has_limit_clause(&normalized_sql) {
+            final_sql.push_str(" LIMIT 1000");
+            was_limited = true;
         }
 
         let rows: Vec<SqliteRow> = sqlx::query(&final_sql)
@@ -191,7 +189,7 @@ impl DatabaseAdapter for SqliteAdapter {
          let mut tables = Vec::new();
          
          for row in table_rows {
-             let table_name: String = row.get(0);
+             let table_name: String = row.try_get(0).map_err(|e| format!("Failed to get table name: {}", e))?;
              
              // 2. Get Columns (PRAGMA table_info)
              let columns_query = format!("PRAGMA table_info(\"{}\")", table_name);
@@ -205,10 +203,10 @@ impl DatabaseAdapter for SqliteAdapter {
              
              for col_row in col_rows {
                  // PRAGMA table_info returns: cid, name, type, notnull, dflt_value, pk
-                 let name: String = col_row.get(1);
-                 let data_type: String = col_row.get(2);
-                 let notnull: i32 = col_row.get(3);
-                 let pk: i32 = col_row.get(5);
+                 let name: String = col_row.try_get(1).unwrap_or_else(|_| "unknown".to_string());
+                 let data_type: String = col_row.try_get(2).unwrap_or_else(|_| "TEXT".to_string());
+                 let notnull: i32 = col_row.try_get(3).unwrap_or(0);
+                 let pk: i32 = col_row.try_get(5).unwrap_or(0);
                  
                  if pk > 0 {
                      primary_keys.push(name.clone());
@@ -232,9 +230,9 @@ impl DatabaseAdapter for SqliteAdapter {
              let mut foreign_keys = Vec::new();
              for fk_row in fk_rows {
                  // id, seq, table, from, to, on_update, on_delete, match
-                 let ref_table: String = fk_row.get(2);
-                 let from_col: String = fk_row.get(3);
-                 let to_col: String = fk_row.get(4); // might be null/empty if implicit?
+                 let ref_table: String = fk_row.try_get(2).unwrap_or_default();
+                 let from_col: String = fk_row.try_get(3).unwrap_or_default();
+                 let to_col: String = fk_row.try_get:: <Option<String>, _>(4).unwrap_or_default().unwrap_or_default(); 
                  
                  foreign_keys.push(ForeignKey {
                      column_name: from_col,

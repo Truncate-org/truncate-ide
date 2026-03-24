@@ -88,7 +88,7 @@ pub async fn profile_table(adapter: &impl DatabaseAdapter, table: &str) -> Resul
 
         if let Ok(QueryResult::ResultSet(rs)) = adapter.execute_query(&stats_query).await {
              if let Some(row) = rs.rows.first() {
-                 let count_num: i64 = row.get(0).and_then(|v| v.parse().ok()).unwrap_or(0);
+                 let count_num: i64 = row.first().and_then(|v| v.parse().ok()).unwrap_or(0);
                  
                  if count_num > 0 {
                      min_val = row.get(1).cloned();
