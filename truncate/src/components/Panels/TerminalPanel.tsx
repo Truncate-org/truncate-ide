@@ -6,6 +6,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { useDatabaseStore } from '../../store/databaseStore';
 import { Terminal as TerminalIcon, AlertTriangle, Loader2 } from 'lucide-react';
+import { logger } from '../../lib/logger';
 
 // VS Code Dark Modern Colors
 const THEME = {
@@ -102,7 +103,7 @@ function TerminalPanelInner({ readOnly = true, setReadOnly: _setReadOnly = () =>
         try {
             await invoke('write_terminal', { id: instanceIdRef.current, data });
         } catch (e) {
-            console.error('[Terminal] Failed to write to PTY:', e);
+            logger.error('[Terminal] Failed to write to PTY:', e);
         }
     }, []);
 
@@ -179,7 +180,7 @@ function TerminalPanelInner({ readOnly = true, setReadOnly: _setReadOnly = () =>
                 // SYNC TERMINAL TO GRID: Silently execute reading queries in the background so the Grid updates
                 if (/^(SELECT|SHOW|DESCRIBE|DESC|EXPLAIN|PRAGMA)/i.test(trimmed)) {
                     invoke('sql_run_query', { sql: trimmed }).catch(e => {
-                        console.warn("[Terminal Sync] Silently ignored grid update error:", e);
+                        logger.warn("[Terminal Sync] Silently ignored grid update error:", e);
                     });
                 }
             }
@@ -401,7 +402,7 @@ function TerminalPanelInner({ readOnly = true, setReadOnly: _setReadOnly = () =>
                         if (pendingActionRef.current?.type === 'DB_SWITCH' && pendingActionRef.current.payload) {
                             const db = pendingActionRef.current.payload;
                             lastSyncedDbRef.current = db;
-                            selectDatabase(db).catch(console.error);
+                            selectDatabase(db).catch(e => logger.error("[Terminal Sync Error]", e));
                             pendingActionRef.current = null;
                         }
                     } else if (data.includes("ERROR") || data.includes("fatal:")) {
@@ -462,7 +463,7 @@ function TerminalPanelInner({ readOnly = true, setReadOnly: _setReadOnly = () =>
     // Auto Connect Effect (Boot only)
     useEffect(() => {
         if (isConnected && connectionStatus === 'ACTIVE' && lastSyncedDbRef.current === null) {
-            console.log(`[Terminal] Booting terminal for connection`);
+            logger.log(`[Terminal] Booting terminal for connection`);
             // Mark as booting to prevent Sync Effect from double booting
             lastSyncedDbRef.current = activeDatabase || 'connected';
 
@@ -486,7 +487,7 @@ function TerminalPanelInner({ readOnly = true, setReadOnly: _setReadOnly = () =>
             if (lastSyncedDbRef.current !== null &&
                 lastSyncedDbRef.current !== 'connected' &&
                 activeDatabase !== lastSyncedDbRef.current) {
-                console.log(`[Terminal] Switching context to: ${activeDatabase}`);
+                logger.log(`[Terminal] Switching context to: ${activeDatabase}`);
 
                 if (connectionType === 'postgres' || connectionType === 'mysql') {
                     if (xtermRef.current) {

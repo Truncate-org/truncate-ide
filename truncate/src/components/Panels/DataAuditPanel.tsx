@@ -4,6 +4,7 @@ import { useUiStore } from '../../store/uiStore';
 import { useDatabaseStore } from '../../store/databaseStore';
 import { Loader2, Sparkles } from 'lucide-react';
 import clsx from 'clsx';
+import { logger } from '../../lib/logger';
 
 // Types (Mirroring Backend)
 interface ColumnProfile {
@@ -56,7 +57,7 @@ export const DataAuditPanel: React.FC = () => {
             const result = await invoke<TableProfile>('run_data_profiling', { tableName });
             setProfile(result);
         } catch (e) {
-            console.error(e);
+            logger.error("Failed to profile table:", e);
             alert('Failed to profile table: ' + e);
         } finally {
             setLoading(false);
@@ -71,7 +72,7 @@ export const DataAuditPanel: React.FC = () => {
             const result = await invoke<string>('ask_audit_ai', { profileJson: json });
             setAiSuggestion(result);
         } catch (e) {
-            console.error(e);
+            logger.error("AI Audit Failed:", e);
             alert('AI Failed: ' + e);
         } finally {
             setAiLoading(false);

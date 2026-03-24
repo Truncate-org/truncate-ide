@@ -4,6 +4,8 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { Loader2, ExternalLink, Eye, EyeOff } from "lucide-react";
 import clsx from "clsx";
 
+import logo from "../../assets/logo.png";
+
 const LoginScreen: React.FC = () => {
   const { login } = useAuth();
   const [username, setUsername] = useState("");
@@ -48,10 +50,8 @@ const LoginScreen: React.FC = () => {
       <div className="w-full max-w-[360px] p-8 flex flex-col items-center">
         {/* Logo / Wordmark */}
         <div className="flex items-center gap-3 mb-10 group">
-          <div className="w-10 h-10 bg-[#007acc] rounded-lg flex items-center justify-center shadow-[0_0_20px_rgba(0,122,204,0.3)] group-hover:shadow-[0_0_25px_rgba(0,122,204,0.5)] transition-all">
-            <svg viewBox="0 0 24 24" className="w-6 h-6 text-white" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <path d="M4 7h16M4 12h16M4 17h16" strokeLinecap="round" />
-            </svg>
+          <div className="w-10 h-10 flex items-center justify-center group-hover:scale-105 transition-transform">
+            <img src={logo} alt="Truncate Logo" className="w-10 h-10 object-contain drop-shadow-[0_0_10px_rgba(0,122,204,0.3)]" />
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-white uppercase italic">Truncate</h1>
         </div>

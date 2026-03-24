@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import { logger } from '../lib/logger';
 
 
 export interface AiMessage {
@@ -170,7 +171,7 @@ export const useAiStore = create<AiStore>((set, get) => ({
         } catch (e: any) {
             if (controller.signal.aborted) return;
 
-            console.error("AI Error:", e);
+            logger.error("AI Error:", e);
             const errorMsg: AiMessage = {
                 id: crypto.randomUUID(),
                 role: 'system',

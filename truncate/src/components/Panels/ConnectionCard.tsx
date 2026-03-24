@@ -3,6 +3,7 @@ import { useDatabaseStore, CsvInspection } from '../../store/databaseStore';
 import { Loader2, AlertCircle, FolderOpen } from 'lucide-react';
 import { open } from '@tauri-apps/plugin-dialog';
 import { CsvPreviewModal } from '../Modals/CsvPreviewModal';
+import { logger } from '../../lib/logger';
 
 export const ConnectionCard: React.FC = () => {
     const { connectServer, isConnecting, connectionError, inspectCsv } = useDatabaseStore();
@@ -57,7 +58,7 @@ export const ConnectionCard: React.FC = () => {
                 }
             }
         } catch (e) {
-            console.error("Failed to open file picker", e);
+            logger.error("Failed to open file picker", e);
         }
     };
 
@@ -79,7 +80,7 @@ export const ConnectionCard: React.FC = () => {
                 setCsvInspection(data);
                 setShowCsvModal(true);
             } catch (e) {
-                console.error("CSV Inspection failed", e);
+                logger.error("CSV Inspection failed", e);
                 // Show error somehow? Maybe alert or toast. 
                 // For now, let's use connectionError if we can inject it? No, store has it.
                 // We'll just alert for now or set error in UI.
@@ -96,7 +97,7 @@ export const ConnectionCard: React.FC = () => {
             await connectServer('csv', form.filePath, 0, JSON.stringify(config), '');
             setShowCsvModal(false);
         } catch (e) {
-            console.error("Failed to connect CSV", e);
+            logger.error("Failed to connect CSV", e);
             // Error is handled in store, shown in UI
         }
     };

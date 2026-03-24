@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import { logger } from '../lib/logger';
 
 export interface ColumnDefinition {
     name: string;
@@ -121,7 +122,7 @@ export const useDatabaseStore = create<DatabaseStore>((set, get) => ({
 
             // Only update if different to avoid redundant fetches if triggered by UI
             if (dbName !== currentActive) {
-                console.log(`[Store] DB Sync Event: Switched to ${dbName}`);
+                logger.log(`[Store] DB Sync Event: Switched to ${dbName}`);
                 // Update active DB state and reset preview
                 set({
                     activeDatabase: dbName,
@@ -136,19 +137,19 @@ export const useDatabaseStore = create<DatabaseStore>((set, get) => ({
                     const tables = await invoke<string[]>('list_tables', {});
                     set({ tables });
                 } catch (e) {
-                    console.error("Failed to fetch tables after sync:", e);
+                    logger.error("Failed to fetch tables after sync:", e);
                 }
             }
         });
 
         listen('schema-changed', async () => {
-            console.log("[Store] Schema Changed detected, refreshing tables");
+            logger.log("[Store] Schema Changed detected, refreshing tables");
             await get().refreshTables();
         });
 
         // Listen for queries executed from Terminal (or other sources)
         listen<QueryResult>('query-executed', (event) => {
-            console.log("[Store] Query Executed Event:", event.payload);
+            logger.log("[Store] Query Executed Event:", event.payload);
             set({
                 previewState: 'result',
                 previewData: event.payload,
@@ -191,7 +192,7 @@ export const useDatabaseStore = create<DatabaseStore>((set, get) => ({
         // Strict Check: active connecting must exist
         const { isConnected } = get();
         if (!isConnected) {
-            console.warn("Attempted to select database without connection");
+            logger.warn("Attempted to select database without connection");
             return;
         }
 
@@ -220,7 +221,7 @@ export const useDatabaseStore = create<DatabaseStore>((set, get) => ({
                 connectionStatus: 'ACTIVE'
             });
         } catch (error: any) {
-            console.error("Failed to select DB:", error);
+            logger.error("Failed to select DB:", error);
             set({ previewState: 'error', previewError: error.toString() });
         }
     },
@@ -317,14 +318,14 @@ export const useDatabaseStore = create<DatabaseStore>((set, get) => ({
             // 2. Kill Backend Terminal PTY
             await invoke('stop_terminal', { id: 'term-1' });
         } catch (e) {
-            console.warn("Failed to stop terminal during disconnect", e);
+            logger.warn("Failed to stop terminal during disconnect", e);
         }
 
         // 3. Close Database Connection
         try {
             await invoke('disconnect_database');
         } catch (e) {
-            console.warn("Failed to disconnect database", e);
+            logger.warn("Failed to disconnect database", e);
         }
 
         // 4. Wipe Store State
@@ -377,7 +378,7 @@ export const useDatabaseStore = create<DatabaseStore>((set, get) => ({
             // For now, simple list update is safer.
             set({ databases });
         } catch (error) {
-            console.error("[Store] Failed to refresh databases:", error);
+            logger.error("[Store] Failed to refresh databases:", error);
         }
     },
 
@@ -390,7 +391,7 @@ export const useDatabaseStore = create<DatabaseStore>((set, get) => ({
             const tables = await invoke<string[]>('list_tables');
             set({ tables });
         } catch (error) {
-            console.error("[Store] Failed to refresh tables:", error);
+            logger.error("[Store] Failed to refresh tables:", error);
         }
     },
 

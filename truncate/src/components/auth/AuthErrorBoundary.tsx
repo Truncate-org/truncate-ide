@@ -1,5 +1,6 @@
 import { Component, ErrorInfo, ReactNode } from "react";
 import { AlertCircle, RefreshCcw } from "lucide-react";
+import { logger } from "../../lib/logger";
 
 interface Props {
   children: ReactNode;
@@ -25,7 +26,7 @@ class AuthErrorBoundary extends Component<Props, State> {
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error("Auth System Error:", error, errorInfo);
+    logger.error("Auth System Error:", error, errorInfo);
     // In a real Tauri app, we would use tauri-plugin-log here:
     // log.error(`Auth Error: ${error.message}`);
   }

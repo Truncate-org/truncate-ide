@@ -3,6 +3,7 @@ import { useAuthStore } from "../../store/authStore";
 import { useAuth } from "../../hooks/useAuth";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { api } from "../../lib/api";
+import { logger } from "../../lib/logger";
 import { 
   CreditCard, 
   RefreshCw, 
@@ -21,7 +22,7 @@ const ProfileSection: React.FC = () => {
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
-  console.log("ProfileSection State Check:", { 
+  logger.log("ProfileSection State Check:", { 
     hasUser: !!user, 
     hasSub: !!subscription, 
     isAuthenticated,
@@ -35,7 +36,7 @@ const ProfileSection: React.FC = () => {
           const res = await api.get<{ status_message: string }>("/api/subscription/status");
           setStatusMessage(res.status_message);
         } catch (err) {
-          console.error("Failed to fetch subscription status:", err);
+          logger.error("Failed to fetch subscription status:", err);
         }
       }
     };
@@ -43,7 +44,7 @@ const ProfileSection: React.FC = () => {
   }, [subscription?.expires_at]);
 
   const handleRefresh = async () => {
-    console.log("Manual refresh requested...");
+    logger.log("Manual refresh requested...");
     setIsRefreshing(true);
     await refresh();
     setTimeout(() => setIsRefreshing(false), 800);
