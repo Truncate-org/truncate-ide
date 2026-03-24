@@ -29,6 +29,7 @@ pub trait DatabaseAdapter: Send + Sync {
     async fn list_databases(&self) -> Result<Vec<String>, String>;
     async fn switch_database(&mut self, db_name: &str) -> Result<bool, String>;
     async fn execute_query(&self, sql: &str) -> Result<QueryResult, String>;
+    async fn execute_raw_query(&self, sql: &str) -> Result<QueryResult, String>;
     async fn preview_table(&self, table_name: &str) -> Result<TablePreview, String>;
     async fn list_tables(&self) -> Result<Vec<String>, String>;
     async fn disconnect(&mut self) -> Result<(), String>;
@@ -80,6 +81,15 @@ impl DatabaseAdapter for DbAdapter {
             DbAdapter::Postgres(a) => a.execute_query(sql).await,
             DbAdapter::Sqlite(a) => a.execute_query(sql).await,
             DbAdapter::Csv(a) => a.execute_query(sql).await,
+        }
+    }
+
+    async fn execute_raw_query(&self, sql: &str) -> Result<QueryResult, String> {
+        match self {
+            DbAdapter::MySql(a) => a.execute_raw_query(sql).await,
+            DbAdapter::Postgres(a) => a.execute_raw_query(sql).await,
+            DbAdapter::Sqlite(a) => a.execute_raw_query(sql).await,
+            DbAdapter::Csv(a) => a.execute_raw_query(sql).await,
         }
     }
 

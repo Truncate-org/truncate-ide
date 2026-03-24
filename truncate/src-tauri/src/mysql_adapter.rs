@@ -123,9 +123,6 @@ impl DatabaseAdapter for MySqlAdapter {
     }
 
     async fn execute_query(&self, sql: &str) -> Result<QueryResult, String> {
-        let pool = self.pool.as_ref().ok_or("No database connection active")?;
-
-        // 0. Extract Last Statement
         let sql_to_run = match get_last_statement(sql) {
             Some(s) => s,
             None => return Err("No query to execute".to_string()),
@@ -133,7 +130,7 @@ impl DatabaseAdapter for MySqlAdapter {
 
         let sql_type = get_sql_type(&sql_to_run);
 
-        // 1. Safety Check
+        // Safety Check
         if !is_safe_for_mvp(&sql_type) {
             return Err(
                 "Destructive queries (UPDATE, DELETE, DROP, etc.) are disabled in this version."
@@ -141,16 +138,22 @@ impl DatabaseAdapter for MySqlAdapter {
             );
         }
 
-        // 2. Handle USE command (if passed directly as query)
-        // Note: In adapter pattern, we might want to handle this at a higher level or return a specific result indicating a switch?
-        // For now, let's treat USE as a special case that returns Success message but doesn't actually switch the pool here
-        // because `switch_database` is mut.
-        // If the user types "USE db", we should probably block it or suggest using the UI.
-        // OR we can implement it if we had interior mutability or passed self as mut?
-        // Since `execute_query` takes `&self`, we cannot modify the pool. So we should block USE commands or handle them via UI.
         if sql_type == SqlType::Use {
             return Err("Please use the database selector to switch databases.".into());
         }
+
+        self.execute_raw_query(sql).await
+    }
+
+    async fn execute_raw_query(&self, sql: &str) -> Result<QueryResult, String> {
+        let pool = self.pool.as_ref().ok_or("No database connection active")?;
+
+        let sql_to_run = match get_last_statement(sql) {
+            Some(s) => s,
+            None => return Err("No query to execute".to_string()),
+        };
+
+        let sql_type = get_sql_type(&sql_to_run);
 
         // Normalize SQL
         let mut normalized_sql = sql_to_run.trim().to_string();

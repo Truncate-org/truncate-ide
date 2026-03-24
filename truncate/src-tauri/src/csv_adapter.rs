@@ -172,7 +172,7 @@ impl DatabaseAdapter for CsvAdapter {
         create_sql.push_str(");");
 
         adapter
-            .execute_query(&create_sql)
+            .execute_raw_query(&create_sql)
             .await
             .map_err(|e| format!("Failed to create main table: {:?} SQL: {}", e, create_sql))?;
 
@@ -181,7 +181,7 @@ impl DatabaseAdapter for CsvAdapter {
             bad_rows_table
         );
         adapter
-            .execute_query(&create_bad_sql)
+            .execute_raw_query(&create_bad_sql)
             .await
             .map_err(|e| format!("Failed to create bad rows table: {:?}", e))?;
 
@@ -382,6 +382,10 @@ impl DatabaseAdapter for CsvAdapter {
 
     async fn execute_query(&self, sql: &str) -> Result<QueryResult, String> {
         self.sqlite_adapter.execute_query(sql).await
+    }
+
+    async fn execute_raw_query(&self, sql: &str) -> Result<QueryResult, String> {
+        self.sqlite_adapter.execute_raw_query(sql).await
     }
 
     async fn preview_table(&self, table_name: &str) -> Result<TablePreview, String> {

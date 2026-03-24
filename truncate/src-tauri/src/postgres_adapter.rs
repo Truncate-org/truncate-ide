@@ -125,8 +125,6 @@ impl DatabaseAdapter for PostgresAdapter {
     }
 
     async fn execute_query(&self, sql: &str) -> Result<QueryResult, String> {
-        let pool = self.pool.as_ref().ok_or("No database connection active")?;
-
         let sql_to_run = match get_last_statement(sql) {
             Some(s) => s,
             None => return Err("No query to execute".to_string()),
@@ -144,6 +142,19 @@ impl DatabaseAdapter for PostgresAdapter {
         if sql_type == SqlType::Use {
             return Err("Please use the database selector to switch databases.".into());
         }
+
+        self.execute_raw_query(sql).await
+    }
+
+    async fn execute_raw_query(&self, sql: &str) -> Result<QueryResult, String> {
+        let pool = self.pool.as_ref().ok_or("No database connection active")?;
+
+        let sql_to_run = match get_last_statement(sql) {
+            Some(s) => s,
+            None => return Err("No query to execute".to_string()),
+        };
+
+        let sql_type = get_sql_type(&sql_to_run);
 
         let mut normalized_sql = sql_to_run.trim().to_string();
         if normalized_sql.ends_with(';') {

@@ -100,9 +100,6 @@ impl DatabaseAdapter for SqliteAdapter {
     }
 
     async fn execute_query(&self, sql: &str) -> Result<QueryResult, String> {
-        let pool = self.pool.as_ref().ok_or("No database connection active")?;
-
-        // 0. Extract Last Statement
         let sql_to_run = match get_last_statement(sql) {
             Some(s) => s,
             None => return Err("No query to execute".to_string()),
@@ -110,13 +107,26 @@ impl DatabaseAdapter for SqliteAdapter {
 
         let sql_type = get_sql_type(&sql_to_run);
 
-        // 1. Safety Check
+        // Safety Check
         if !is_safe_for_mvp(&sql_type) {
             return Err(
                 "Destructive queries (UPDATE, DELETE, DROP, etc.) are disabled in this version."
                     .into(),
             );
         }
+
+        self.execute_raw_query(sql).await
+    }
+
+    async fn execute_raw_query(&self, sql: &str) -> Result<QueryResult, String> {
+        let pool = self.pool.as_ref().ok_or("No database connection active")?;
+
+        let sql_to_run = match get_last_statement(sql) {
+            Some(s) => s,
+            None => return Err("No query to execute".to_string()),
+        };
+
+        let sql_type = get_sql_type(&sql_to_run);
 
         // Normalize SQL
         let mut normalized_sql = sql_to_run.trim().to_string();
