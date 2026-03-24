@@ -16,11 +16,11 @@ pub struct ConnectionConfig {
     pub current_database: Option<String>,
 }
 
-use crate::types::{QueryResult, TablePreview};
+use crate::csv_adapter::CsvAdapter;
 use crate::mysql_adapter::MySqlAdapter;
 use crate::postgres_adapter::PostgresAdapter;
 use crate::sqlite_adapter::SqliteAdapter;
-use crate::csv_adapter::CsvAdapter;
+use crate::types::{QueryResult, TablePreview};
 use async_trait::async_trait;
 
 #[async_trait]

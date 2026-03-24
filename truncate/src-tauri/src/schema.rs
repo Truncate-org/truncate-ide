@@ -183,10 +183,7 @@ pub fn save_schema_files(
                 .map(|o| o.status.success())
                 .unwrap_or(false)
         }
-        Err(e) => {
-            eprintln!("Failed to resolve dot binary: {}", e);
-            false
-        }
+        Err(_e) => false,
     };
 
     Ok(ExportResult {

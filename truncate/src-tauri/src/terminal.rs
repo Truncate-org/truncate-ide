@@ -1,10 +1,10 @@
+use crate::adapter::{ConnectionType, DatabaseAdapter};
 use portable_pty::{CommandBuilder, NativePtySystem, PtySize, PtySystem};
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use tauri::{Emitter, State};
-use crate::adapter::{ConnectionType, DatabaseAdapter};
 
 pub struct TerminalSession {
     pub writer: Box<dyn Write + Send>,
@@ -42,7 +42,9 @@ pub async fn start_terminal_auto(
     // Retrieve active connection config
     let config = {
         let guard = db_state.adapter.lock().await;
-        let adapter = guard.as_ref().ok_or("No active database connection found")?;
+        let adapter = guard
+            .as_ref()
+            .ok_or("No active database connection found")?;
         adapter.get_connection_config()
     };
 
@@ -59,15 +61,15 @@ pub async fn start_terminal_auto(
             args.push(config.port.to_string());
             args.push("-u".to_string());
             args.push(config.user.clone());
-            
+
             if !config.pass.is_empty() {
-                args.push(format!("-p{}", config.pass)); 
+                args.push(format!("-p{}", config.pass));
             }
 
             if let Some(db_name) = config.current_database {
                 args.push(db_name);
             }
-        },
+        }
         ConnectionType::PostgreSQL => {
             bin = "psql".to_string();
             // psql "postgresql://user:pass@host:port/dbname"
@@ -75,7 +77,7 @@ pub async fn start_terminal_auto(
             // We need to clear password potentially if using args, passing via env is better.
             // PGPASSWORD env var.
             // But portable-pty allows env vars.
-            
+
             args.push("-h".to_string());
             args.push(config.host.clone());
             args.push("-p".to_string());
@@ -83,18 +85,22 @@ pub async fn start_terminal_auto(
             args.push("-U".to_string());
             args.push(config.user.clone());
             args.push("-d".to_string());
-            args.push(config.current_database.clone().unwrap_or_else(|| "postgres".to_string()));
-            
-            
+            args.push(
+                config
+                    .current_database
+                    .clone()
+                    .unwrap_or_else(|| "postgres".to_string()),
+            );
+
             // For password, we'll try to set env var but NativePtySystem might inherit.
             // We can pass password in connection string but that shows in ps.
             // But strict requirement: "Seamless".
-            // We will pass env in `start_terminal` if modified to accept it, 
+            // We will pass env in `start_terminal` if modified to accept it,
             // or just set it in current process scope temporarily (bad idea for threaded).
-            
+
             // `portable_pty::CommandBuilder` has `env` method.
             // We need to modify `start_terminal` to accept env map.
-        },
+        }
         ConnectionType::SQLite | ConnectionType::Csv => {
             bin = "sqlite3".to_string();
             if let Some(db_path) = config.current_database {
@@ -104,13 +110,21 @@ pub async fn start_terminal_auto(
     }
 
     // Call start_terminal with env if needed
-    start_terminal_with_env(window, state, id, bin, args, None, if config.db_type == ConnectionType::PostgreSQL {
-        let mut map = HashMap::new();
-        map.insert("PGPASSWORD".to_string(), config.pass.clone());
-        Some(map)
-    } else {
-        None
-    })
+    start_terminal_with_env(
+        window,
+        state,
+        id,
+        bin,
+        args,
+        None,
+        if config.db_type == ConnectionType::PostgreSQL {
+            let mut map = HashMap::new();
+            map.insert("PGPASSWORD".to_string(), config.pass.clone());
+            Some(map)
+        } else {
+            None
+        },
+    )
 }
 
 #[tauri::command]
@@ -135,6 +149,20 @@ fn start_terminal_with_env(
     cwd: Option<String>,
     env: Option<HashMap<String, String>>,
 ) -> Result<(), String> {
+    // Proactive check for binary existence to give better error message
+    if !is_binary_available(&bin) {
+        let install_hint = match bin.as_str() {
+            "mysql" => "You can install it via 'brew install mysql-client' on macOS or 'sudo apt-get install mysql-client' on Linux.",
+            "psql" => "You can install it via 'brew install postgresql' on macOS or 'sudo apt-get install postgresql-client' on Linux.",
+            "sqlite3" => "You can install it via 'brew install sqlite' on macOS or 'sudo apt-get install sqlite3' on Linux.",
+            _ => "Please ensure the required CLI tool is installed and available in your PATH."
+        };
+        return Err(format!(
+            "The required database CLI tool '{}' was not found on your system. {}",
+            bin, install_hint
+        ));
+    }
+
     let pty_system = NativePtySystem::default();
 
     let pair = pty_system
@@ -148,11 +176,11 @@ fn start_terminal_with_env(
 
     let mut cmd = CommandBuilder::new(&bin);
     cmd.args(&args);
-    
+
     if let Some(dir) = cwd {
         cmd.cwd(dir);
     }
-    
+
     if let Some(env_vars) = env {
         for (k, v) in env_vars {
             cmd.env(k, v);
@@ -190,12 +218,14 @@ fn start_terminal_with_env(
                 Ok(n) if n > 0 => {
                     let data = &buf[..n];
                     let text = String::from_utf8_lossy(data).to_string();
-                    if let Err(e) = window.emit("terminal-output", (id_clone.clone(), text)) {
-                        eprintln!("Failed to emit terminal output: {}", e);
+                    if window
+                        .emit("terminal-output", (id_clone.clone(), text))
+                        .is_err()
+                    {
                         break;
                     }
                 }
-                Ok(_) => break, // EOF
+                Ok(_) => break,  // EOF
                 Err(_) => break, // Error
             }
         }
@@ -245,10 +275,7 @@ pub fn resize_terminal(
 }
 
 #[tauri::command]
-pub fn stop_terminal(
-    state: State<'_, TerminalState>,
-    id: String,
-) -> Result<(), String> {
+pub fn stop_terminal(state: State<'_, TerminalState>, id: String) -> Result<(), String> {
     let mut sessions = state.sessions.lock().unwrap();
     if let Some(mut session) = sessions.remove(&id) {
         // Dropping the session (which contains the PtyMaster) should terminate the process.
@@ -258,4 +285,22 @@ pub fn stop_terminal(
     } else {
         Ok(())
     }
+}
+
+fn is_binary_available(bin: &str) -> bool {
+    use std::process::Command;
+    // On Windows we might need to check for .exe but let's stick to standard PATH check
+    #[cfg(windows)]
+    let bin_with_ext = if bin.ends_with(".exe") {
+        bin.to_string()
+    } else {
+        format!("{}.exe", bin)
+    };
+    #[cfg(not(windows))]
+    let bin_with_ext = bin.to_string();
+
+    Command::new(&bin_with_ext)
+        .arg("--version")
+        .output()
+        .is_ok()
 }

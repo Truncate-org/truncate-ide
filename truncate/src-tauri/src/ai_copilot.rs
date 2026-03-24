@@ -1,14 +1,14 @@
 use crate::adapter::DatabaseAdapter;
 use crate::db_state::DbState;
 use crate::schema::Schema;
+use futures_util::StreamExt;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Mutex;
-use tauri::{State, Emitter};
-use tokio::task::AbortHandle;
-use futures_util::StreamExt;
+use tauri::{Emitter, State};
 use tauri_plugin_shell::{process::CommandChild, ShellExt};
+use tokio::task::AbortHandle;
 
 // -----------------------------------------------------------------------------
 // 1. Data Structures
@@ -186,27 +186,30 @@ pub async fn is_engine_installed(app: tauri::AppHandle) -> bool {
 pub async fn sync_engine_assets(window: tauri::Window) -> Result<(), String> {
     let client = reqwest::Client::new();
     let url = "http://127.0.0.1:11434/api/pull";
-    
+
     let payload = serde_json::json!({
         "name": "qwen2.5-coder:latest",
         "stream": true
     });
 
-    let res = client.post(url)
+    let res = client
+        .post(url)
         .json(&payload)
         .send()
         .await
         .map_err(|e| format!("Connection to internal core failed: {}", e))?;
 
     let mut stream = res.bytes_stream();
-    
+
     while let Some(item) = stream.next().await {
         let chunk = item.map_err(|e| e.to_string())?;
         let text = String::from_utf8_lossy(&chunk);
-        
+
         // Ollama can bundle multiple JSON objects in one chunk
         for line in text.split('\n') {
-            if line.trim().is_empty() { continue; }
+            if line.trim().is_empty() {
+                continue;
+            }
             if let Ok(progress) = serde_json::from_str::<PullProgress>(line) {
                 let _ = window.emit("engine-sync-progress", &progress);
             }
@@ -221,7 +224,6 @@ pub async fn cancel_ai_request() {
     let mut handle_lock = ACTIVE_REQUEST.lock().unwrap();
     if let Some(handle) = handle_lock.take() {
         handle.abort();
-        println!("AI Request Cancelled by User");
     }
 }
 
@@ -362,15 +364,10 @@ pub fn start_ollama(app: &tauri::AppHandle) {
     if let Ok(sidecar) = app.shell().sidecar("ollama") {
         match sidecar.args(["serve"]).spawn() {
             Ok((_rx, child)) => {
-                println!("Internal core subsystem active.");
                 *running = Some(child);
             }
-            Err(e) => {
-                println!("Subsystem activation bypassed: {}. Checking system environment.", e);
-            }
+            Err(_e) => {}
         }
-    } else {
-        println!("Subsystem binary not found in sidecars. Checking system environment.");
     }
 }
 
@@ -378,6 +375,5 @@ pub fn stop_ollama(_app: &tauri::AppHandle) {
     let mut running = OLLAMA_RUNNING.lock().unwrap();
     if let Some(child) = running.take() {
         let _ = child.kill();
-        println!("Internal core subsystem terminated.");
     }
 }

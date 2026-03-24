@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::collections::HashMap;
 
 #[derive(Debug, Deserialize)]
@@ -17,10 +17,7 @@ pub struct ProxyResponse {
 }
 
 #[tauri::command]
-pub async fn api_proxy(
-    mut request: ProxyRequest,
-) -> Result<ProxyResponse, String> {
-    println!("Proxy Request: {} {}", request.method, request.url);
+pub async fn api_proxy(mut request: ProxyRequest) -> Result<ProxyResponse, String> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(10))
         .build()
@@ -28,8 +25,9 @@ pub async fn api_proxy(
 
     // 1. Virtual Endpoint for /api/subscription/status
     if request.url.contains("/api/subscription/status") {
-        let is_ceo = request.headers.get("Authorization") == Some(&"Bearer mock_ceo_token_12345".to_string());
-        
+        let is_ceo = request.headers.get("Authorization")
+            == Some(&"Bearer mock_ceo_token_12345".to_string());
+
         let expires_at = if is_ceo {
             Some("2026-05-10T23:59:59Z".to_string())
         } else {
@@ -43,19 +41,27 @@ pub async fn api_proxy(
             if let Ok(res) = dash_builder.send().await {
                 if res.status().as_u16() == 200 {
                     if let Ok(dash_data) = res.json::<Value>().await {
-                        dash_data.get("subscription")
+                        dash_data
+                            .get("subscription")
                             .and_then(|s| s.get("expires_at").or(s.get("end_date")))
                             .and_then(|v| v.as_str())
                             .map(|s| s.to_string())
                             .or_else(|| {
-                                dash_data.get("data")
+                                dash_data
+                                    .get("data")
                                     .and_then(|d| d.get("end_date"))
                                     .and_then(|v| v.as_str())
                                     .map(|s| s.to_string())
                             })
-                    } else { None }
-                } else { None }
-            } else { None }
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
         };
 
         let status = crate::subscription::get_subscription_status(expires_at).unwrap_or(
@@ -63,7 +69,7 @@ pub async fn api_proxy(
                 is_active: false,
                 days_remaining: 0,
                 status_message: "Syncing...".to_string(),
-            }
+            },
         );
 
         return Ok(ProxyResponse {
@@ -73,8 +79,9 @@ pub async fn api_proxy(
     }
 
     // 2. Mock Verify/Dashboard for CEO Fallback
-    if (request.url.contains("/api/dashboard") || request.url.contains("/api/auth/verify")) 
-       && request.headers.get("Authorization") == Some(&"Bearer mock_ceo_token_12345".to_string()) {
+    if (request.url.contains("/api/dashboard") || request.url.contains("/api/auth/verify"))
+        && request.headers.get("Authorization") == Some(&"Bearer mock_ceo_token_12345".to_string())
+    {
         return Ok(ProxyResponse {
             status: 200,
             data: json!({
@@ -92,12 +99,12 @@ pub async fn api_proxy(
                     "credits_remaining": 480,
                     "expires_at": "2026-05-10T23:59:59Z"
                 }
-            })
+            }),
         });
     }
 
     // 3. Endpoint Normalization
-    // If the frontend calls /api/auth/verify, and we don't have a specific mock, 
+    // If the frontend calls /api/auth/verify, and we don't have a specific mock,
     // we map it to /api/dashboard as a "token validity probe".
     let target_url = if request.url.contains("/api/auth/verify") {
         request.url.replace("/api/auth/verify", "/api/dashboard")
@@ -136,25 +143,23 @@ pub async fn api_proxy(
 
     // Try to send the request, but catch timeouts/errors for the CEO fallback
     let response_result = builder.send().await;
-    
+
     match response_result {
         Ok(response) => {
             let status = response.status().as_u16();
             let data: Value = response.json().await.unwrap_or(Value::Null);
-            println!("Proxy Response Status: {}. Data: {}", status, serde_json::to_string(&data).unwrap_or("{}".to_string()).chars().take(200).collect::<String>());
 
             // Path 1: Successful but 401 (e.g. password mismatch or backend sync issue)
-            if status == 401 && (target_url.contains("/auth/login") || target_url.contains("/auth/subscription")) {
+            if status == 401
+                && (target_url.contains("/auth/login") || target_url.contains("/auth/subscription"))
+            {
                 if let Some(mock) = check_ceo_fallback(&request) {
                     return Ok(mock);
                 }
             }
 
-            Ok(ProxyResponse {
-                status,
-                data,
-            })
-        },
+            Ok(ProxyResponse { status, data })
+        }
         Err(e) => {
             // Path 2: Network Error (Timeout, DNS, etc.)
             // If this is the CEO account, we return the mock instead of the error
@@ -171,10 +176,15 @@ pub async fn api_proxy(
 // Helper to check for CEO credentials and return mock response
 fn check_ceo_fallback(request: &ProxyRequest) -> Option<ProxyResponse> {
     if let Some(body) = &request.body {
-        let iden = body.get("username").or(body.get("email")).and_then(|v| v.as_str());
+        let iden = body
+            .get("username")
+            .or(body.get("email"))
+            .and_then(|v| v.as_str());
         let pass = body.get("password").and_then(|v| v.as_str());
 
-        if iden == Some("CEO_Truncate") && (pass == Some("Arpit12345@") || pass == Some("Arpit12345@@")) {
+        if iden == Some("CEO_Truncate")
+            && (pass == Some("Arpit12345@") || pass == Some("Arpit12345@@"))
+        {
             return Some(ProxyResponse {
                 status: 200,
                 data: json!({
@@ -192,10 +202,9 @@ fn check_ceo_fallback(request: &ProxyRequest) -> Option<ProxyResponse> {
                         "credits_remaining": 480,
                         "expires_at": "2026-05-10T23:59:59Z"
                     }
-                })
+                }),
             });
         }
     }
     None
 }
-

@@ -1,6 +1,6 @@
+use sqlparser::ast::Statement;
 use sqlparser::dialect::{GenericDialect, MySqlDialect};
 use sqlparser::parser::Parser;
-use sqlparser::ast::Statement;
 
 #[derive(Debug, PartialEq)]
 pub enum SqlType {
@@ -22,10 +22,8 @@ pub fn get_last_statement(sql: &str) -> Option<String> {
     }
 
     // Try MySQL dialect first (handles backticks), then Generic
-    let dialects: Vec<Box<dyn sqlparser::dialect::Dialect>> = vec![
-        Box::new(MySqlDialect {}),
-        Box::new(GenericDialect {}),
-    ];
+    let dialects: Vec<Box<dyn sqlparser::dialect::Dialect>> =
+        vec![Box::new(MySqlDialect {}), Box::new(GenericDialect {})];
 
     for dialect in &dialects {
         if let Ok(ast) = Parser::parse_sql(dialect.as_ref(), trimmed) {
@@ -38,11 +36,15 @@ pub fn get_last_statement(sql: &str) -> Option<String> {
     // Fallback: if the SQL starts with a known keyword, return it as-is
     // This handles edge cases where neither dialect can parse but the SQL is valid
     let upper = trimmed.to_uppercase();
-    if upper.starts_with("SELECT ") || upper.starts_with("CREATE ") ||
-       upper.starts_with("INSERT ") || upper.starts_with("UPDATE ") ||
-       upper.starts_with("DELETE ") || upper.starts_with("DROP ") ||
-       upper.starts_with("ALTER ") || upper.starts_with("USE ") ||
-       upper.starts_with("SHOW ")
+    if upper.starts_with("SELECT ")
+        || upper.starts_with("CREATE ")
+        || upper.starts_with("INSERT ")
+        || upper.starts_with("UPDATE ")
+        || upper.starts_with("DELETE ")
+        || upper.starts_with("DROP ")
+        || upper.starts_with("ALTER ")
+        || upper.starts_with("USE ")
+        || upper.starts_with("SHOW ")
     {
         return Some(trimmed.to_string());
     }
@@ -58,10 +60,8 @@ pub fn get_sql_type(sql: &str) -> SqlType {
     }
 
     // Try MySQL dialect first, then Generic
-    let dialects: Vec<Box<dyn sqlparser::dialect::Dialect>> = vec![
-        Box::new(MySqlDialect {}),
-        Box::new(GenericDialect {}),
-    ];
+    let dialects: Vec<Box<dyn sqlparser::dialect::Dialect>> =
+        vec![Box::new(MySqlDialect {}), Box::new(GenericDialect {})];
 
     for dialect in &dialects {
         if let Ok(ast) = Parser::parse_sql(dialect.as_ref(), sql) {
@@ -83,30 +83,37 @@ pub fn get_sql_type(sql: &str) -> SqlType {
 
     // Keyword-based fallback
     let upper = trimmed.to_uppercase();
-    if upper.starts_with("SELECT ") { SqlType::Select }
-    else if upper.starts_with("CREATE ") { SqlType::Create }
-    else if upper.starts_with("DROP ") { SqlType::Drop }
-    else if upper.starts_with("ALTER ") { SqlType::Alter }
-    else if upper.starts_with("INSERT ") { SqlType::Insert }
-    else if upper.starts_with("UPDATE ") { SqlType::Update }
-    else if upper.starts_with("DELETE ") { SqlType::Delete }
-    else { SqlType::Other }
+    if upper.starts_with("SELECT ") {
+        SqlType::Select
+    } else if upper.starts_with("CREATE ") {
+        SqlType::Create
+    } else if upper.starts_with("DROP ") {
+        SqlType::Drop
+    } else if upper.starts_with("ALTER ") {
+        SqlType::Alter
+    } else if upper.starts_with("INSERT ") {
+        SqlType::Insert
+    } else if upper.starts_with("UPDATE ") {
+        SqlType::Update
+    } else if upper.starts_with("DELETE ") {
+        SqlType::Delete
+    } else {
+        SqlType::Other
+    }
 }
 
 pub fn is_safe_for_mvp(sql_type: &SqlType) -> bool {
     match sql_type {
         // Only allow non-destructive operations for the MVP "Safe" mode
-        SqlType::Select | 
-        SqlType::Use | 
-        SqlType::Other => true,
-        
+        SqlType::Select | SqlType::Use | SqlType::Other => true,
+
         // Destructive operations are blocked to prevent accidental data loss in MVP
-        SqlType::Create | 
-        SqlType::Drop | 
-        SqlType::Alter | 
-        SqlType::Insert | 
-        SqlType::Update | 
-        SqlType::Delete => false,
+        SqlType::Create
+        | SqlType::Drop
+        | SqlType::Alter
+        | SqlType::Insert
+        | SqlType::Update
+        | SqlType::Delete => false,
     }
 }
 
@@ -133,15 +140,19 @@ pub fn format_table(columns: &[String], rows: &[Vec<String>]) -> String {
 
     // 1. Calculate Widths
     let mut widths: Vec<usize> = columns.iter().map(|c| c.len()).collect();
-    
+
     // Max width per column to prevent terminal explosion, say 50?
     // And scan rows
-    // Limited to 50 rows for formatter to match the previous logic? 
+    // Limited to 50 rows for formatter to match the previous logic?
     // Or format ALL rows? Terminal paging usually handles it, but massive string is bad.
     // Let's limit scan to 100 rows for width calc, and display maybe 100 rows?
-    
-    let display_rows = if rows.len() > 100 { &rows[0..100] } else { rows };
-    
+
+    let display_rows = if rows.len() > 100 {
+        &rows[0..100]
+    } else {
+        rows
+    };
+
     for row in display_rows {
         for (i, cell) in row.iter().enumerate() {
             if i < widths.len() {
@@ -161,7 +172,7 @@ pub fn format_table(columns: &[String], rows: &[Vec<String>]) -> String {
         separator.push_str(&"-".repeat(*w + 2));
         separator.push('+');
     }
-    
+
     let mut output = String::new();
     output.push_str("\r\n"); // Start with newline
     output.push_str(&separator);
@@ -186,8 +197,8 @@ pub fn format_table(columns: &[String], rows: &[Vec<String>]) -> String {
             if i < widths.len() {
                 output.push(' ');
                 let content = if cell.len() > widths[i] {
-                     // Truncate
-                     format!("{}...", &cell[0..widths[i]-3])
+                    // Truncate
+                    format!("{}...", &cell[0..widths[i] - 3])
                 } else {
                     cell.clone()
                 };
@@ -201,9 +212,12 @@ pub fn format_table(columns: &[String], rows: &[Vec<String>]) -> String {
 
     output.push_str(&separator);
     output.push_str("\r\n");
-    
+
     if rows.len() > display_rows.len() {
-        output.push_str(&format!("\x1b[90m... and {} more rows (view in Preview Panel)\x1b[0m\r\n", rows.len() - display_rows.len()));
+        output.push_str(&format!(
+            "\x1b[90m... and {} more rows (view in Preview Panel)\x1b[0m\r\n",
+            rows.len() - display_rows.len()
+        ));
     }
     output.push_str(&format!("\x1b[90m{} rows in set\x1b[0m\r\n", rows.len()));
 
@@ -219,7 +233,7 @@ mod tests {
         assert!(is_safe_for_mvp(&SqlType::Select));
         assert!(is_safe_for_mvp(&SqlType::Use));
         assert!(is_safe_for_mvp(&SqlType::Other));
-        
+
         assert!(!is_safe_for_mvp(&SqlType::Create));
         assert!(!is_safe_for_mvp(&SqlType::Drop));
         assert!(!is_safe_for_mvp(&SqlType::Alter));
@@ -231,7 +245,10 @@ mod tests {
     #[test]
     fn test_get_sql_type_detection() {
         assert_eq!(get_sql_type("SELECT * FROM users"), SqlType::Select);
-        assert_eq!(get_sql_type("UPDATE users SET name = 'foo'"), SqlType::Update);
+        assert_eq!(
+            get_sql_type("UPDATE users SET name = 'foo'"),
+            SqlType::Update
+        );
         assert_eq!(get_sql_type("DELETE FROM users"), SqlType::Delete);
         assert_eq!(get_sql_type("DROP TABLE users"), SqlType::Drop);
         assert_eq!(get_sql_type("USE my_db"), SqlType::Use);

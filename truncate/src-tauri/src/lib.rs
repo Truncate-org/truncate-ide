@@ -1,32 +1,34 @@
-use tauri::{State, Emitter};
 use std::path::PathBuf;
-use tauri::Manager; // For path access
+use tauri::Manager;
+use tauri::{Emitter, State}; // For path access
 
-pub mod types;
 pub mod adapter;
-pub mod mysql_adapter;
-pub mod csv_adapter;
-pub mod postgres_adapter;
-pub mod sqlite_adapter;
-pub mod db_state;
-pub mod sql_utils;
-pub mod schema;
-pub mod terminal;
 pub mod ai_copilot;
-pub mod data_profiling;
-pub mod keychain;
 pub mod api_proxy;
+pub mod csv_adapter;
+pub mod data_profiling;
+pub mod db_state;
+pub mod keychain;
+pub mod mysql_adapter;
+pub mod postgres_adapter;
+pub mod schema;
+pub mod sql_utils;
+pub mod sqlite_adapter;
 pub mod subscription;
+pub mod terminal;
+pub mod types;
 
-
-use crate::db_state::DbState;
 use crate::adapter::{DatabaseAdapter, DbAdapter};
+use crate::csv_adapter::CsvAdapter;
+use crate::db_state::DbState;
 use crate::mysql_adapter::MySqlAdapter;
 use crate::postgres_adapter::PostgresAdapter;
 use crate::sqlite_adapter::SqliteAdapter;
-use crate::csv_adapter::CsvAdapter;
+use crate::terminal::{
+    resize_terminal, start_terminal, start_terminal_auto, stop_terminal, write_terminal,
+    TerminalState,
+};
 use crate::types::{QueryResult, TablePreview};
-use crate::terminal::{TerminalState, start_terminal, write_terminal, resize_terminal, start_terminal_auto, stop_terminal};
 
 #[tauri::command]
 async fn inspect_csv(path: String) -> Result<crate::types::CsvInspection, String> {
@@ -42,18 +44,17 @@ async fn connect_server(
     user: String,
     pass: String,
 ) -> Result<Vec<String>, String> {
-    
     let mut adapter = match db_type.as_str() {
         "mysql" => DbAdapter::MySql(MySqlAdapter::new(&host, port, &user, &pass)),
         "postgres" => DbAdapter::Postgres(PostgresAdapter::new(&host, port, &user, &pass)),
         "sqlite" => DbAdapter::Sqlite(SqliteAdapter::new(&host)), // Host contains file path
-        "csv" => DbAdapter::Csv(CsvAdapter::new(&host, &user)?), // Host=path, User=config_json
+        "csv" => DbAdapter::Csv(CsvAdapter::new(&host, &user)?),  // Host=path, User=config_json
         _ => return Err(format!("Unsupported database type: {}", db_type)),
     };
 
     adapter.connect().await?;
     let databases = adapter.list_databases().await?;
-    
+
     let mut guard = state.adapter.lock().await;
     *guard = Some(adapter);
 
@@ -68,20 +69,19 @@ async fn select_database(
 ) -> Result<(), String> {
     let mut guard = state.adapter.lock().await;
     let adapter = guard.as_mut().ok_or("No active connection")?;
-    
+
     adapter.switch_database(&database_name).await?;
-    
+
     // Emit event for UI sync
-    window.emit("db-switched", &database_name)
+    window
+        .emit("db-switched", &database_name)
         .map_err(|e| format!("Failed to emit event: {}", e))?;
 
     Ok(())
 }
 
 #[tauri::command]
-async fn list_tables(
-    state: State<'_, DbState>,
-) -> Result<Vec<String>, String> {
+async fn list_tables(state: State<'_, DbState>) -> Result<Vec<String>, String> {
     let guard = state.adapter.lock().await;
     let adapter = guard.as_ref().ok_or("No active connection")?;
     adapter.list_tables().await
@@ -105,26 +105,26 @@ async fn sql_run_query(
 ) -> Result<QueryResult, String> {
     let guard = state.adapter.lock().await;
     let adapter = guard.as_ref().ok_or("No active connection")?;
-    
+
     // Execute
     let mut result = adapter.execute_query(&sql).await?;
-    
+
     // Inject Formatted Text for Terminal
     if let QueryResult::ResultSet(ref mut preview) = result {
         let col_names: Vec<String> = preview.columns.iter().map(|c| c.name.clone()).collect();
         let formatted = crate::sql_utils::format_table(&col_names, &preview.rows);
         preview.formatted_output = Some(formatted);
     }
-    
+
     // Check for schema changes
     if let Some(stmt) = crate::sql_utils::get_last_statement(&sql) {
         let sql_type = crate::sql_utils::get_sql_type(&stmt);
         match sql_type {
-            crate::sql_utils::SqlType::Create | 
-            crate::sql_utils::SqlType::Drop | 
-            crate::sql_utils::SqlType::Alter => {
+            crate::sql_utils::SqlType::Create
+            | crate::sql_utils::SqlType::Drop
+            | crate::sql_utils::SqlType::Alter => {
                 let _ = window.emit("schema-changed", ());
-            },
+            }
             _ => {}
         }
     }
@@ -166,8 +166,11 @@ async fn export_database_schema(
     };
 
     // 2. Determine download path
-    let download_path = app_handle.path().download_dir().unwrap_or(PathBuf::from("."));
-    
+    let download_path = app_handle
+        .path()
+        .download_dir()
+        .unwrap_or(PathBuf::from("."));
+
     // 3. Save Files (sync file io is okay here, or make async)
     crate::schema::save_schema_files(&schema, &download_path, &app_handle)
 }
@@ -176,14 +179,14 @@ async fn export_database_schema(
 async fn drop_database(
     window: tauri::Window,
     state: State<'_, DbState>,
-    database_name: String
+    database_name: String,
 ) -> Result<(), String> {
     let mut guard = state.adapter.lock().await;
     let adapter = guard.as_mut().ok_or("No active connection")?;
 
     // 1. Check if we are deleting the CURRENT active database
     let current_db_res = adapter.get_current_database().await;
-    
+
     // Some adapters might fail to get current DB, ignore that for check if needed or handle gracefully
     if let Ok(current) = current_db_res {
         if current == database_name {
@@ -196,11 +199,11 @@ async fn drop_database(
                     let _ = adapter.switch_database("mysql").await;
                     // Update UI that we switched?
                     let _ = window.emit("db-switched", "mysql");
-                },
+                }
                 crate::adapter::ConnectionType::PostgreSQL => {
                     let _ = adapter.switch_database("postgres").await;
                     let _ = window.emit("db-switched", "postgres");
-                },
+                }
                 _ => {
                     // For others, maybe we can't switch?
                 }
@@ -221,7 +224,7 @@ async fn run_data_profiling(
 ) -> Result<crate::data_profiling::TableProfile, String> {
     let guard = state.adapter.lock().await;
     let adapter = guard.as_ref().ok_or("No active connection")?;
-    
+
     crate::data_profiling::profile_table(adapter, &table_name).await
 }
 
@@ -270,7 +273,6 @@ pub fn run() {
             api_proxy::api_proxy,
             subscription::get_subscription_status
         ])
-
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app_handle, event| {

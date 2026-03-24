@@ -1,5 +1,5 @@
-use tokio::sync::Mutex;
 use crate::adapter::DbAdapter;
+use tokio::sync::Mutex;
 
 pub struct DbState {
     pub adapter: Mutex<Option<DbAdapter>>,
