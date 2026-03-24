@@ -1,0 +1,50 @@
+name: Release
+on:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  publish:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [macos-latest]
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: 'npm'
+          cache-dependency-path: truncate/package-lock.json
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          # Build for both Intel and Apple Silicon
+          targets: x86_64-apple-darwin, aarch64-apple-darwin
+
+      - name: Install dependencies
+        run: |
+          cd truncate
+          npm install
+
+      - name: Build and Release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: v__VERSION__-build-${{ github.run_number }}
+          releaseName: "Truncate v__VERSION__ (Build ${{ github.run_number }})"
+          releaseBody: "Automated release from GitHub Actions. Build number: ${{ github.run_number }}"
+          releaseDraft: true
+          prerelease: false
+          projectPath: truncate

@@ -95,16 +95,18 @@ pub fn get_sql_type(sql: &str) -> SqlType {
 
 pub fn is_safe_for_mvp(sql_type: &SqlType) -> bool {
     match sql_type {
-        // Allow all standard SQL operations for the IDE functionality
+        // Only allow non-destructive operations for the MVP "Safe" mode
         SqlType::Select | 
         SqlType::Use | 
+        SqlType::Other => true,
+        
+        // Destructive operations are blocked to prevent accidental data loss in MVP
         SqlType::Create | 
         SqlType::Drop | 
         SqlType::Alter | 
         SqlType::Insert | 
         SqlType::Update | 
-        SqlType::Delete | 
-        SqlType::Other => true,
+        SqlType::Delete => false,
     }
 }
 
@@ -206,4 +208,32 @@ pub fn format_table(columns: &[String], rows: &[Vec<String>]) -> String {
     output.push_str(&format!("\x1b[90m{} rows in set\x1b[0m\r\n", rows.len()));
 
     output
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_safe_for_mvp() {
+        assert!(is_safe_for_mvp(&SqlType::Select));
+        assert!(is_safe_for_mvp(&SqlType::Use));
+        assert!(is_safe_for_mvp(&SqlType::Other));
+        
+        assert!(!is_safe_for_mvp(&SqlType::Create));
+        assert!(!is_safe_for_mvp(&SqlType::Drop));
+        assert!(!is_safe_for_mvp(&SqlType::Alter));
+        assert!(!is_safe_for_mvp(&SqlType::Insert));
+        assert!(!is_safe_for_mvp(&SqlType::Update));
+        assert!(!is_safe_for_mvp(&SqlType::Delete));
+    }
+
+    #[test]
+    fn test_get_sql_type_detection() {
+        assert_eq!(get_sql_type("SELECT * FROM users"), SqlType::Select);
+        assert_eq!(get_sql_type("UPDATE users SET name = 'foo'"), SqlType::Update);
+        assert_eq!(get_sql_type("DELETE FROM users"), SqlType::Delete);
+        assert_eq!(get_sql_type("DROP TABLE users"), SqlType::Drop);
+        assert_eq!(get_sql_type("USE my_db"), SqlType::Use);
+    }
 }

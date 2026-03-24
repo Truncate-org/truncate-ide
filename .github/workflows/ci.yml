@@ -1,0 +1,48 @@
+name: CI Checks
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  frontend-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: 'npm'
+          cache-dependency-path: truncate/package-lock.json
+      - name: Install dependencies
+        run: |
+          cd truncate
+          npm install
+      - name: Type check and build
+        run: |
+          cd truncate
+          npm run build
+
+  backend-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Install dependencies (Linux)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev libappindicator3-dev librsvg2-dev patchelf
+      - name: Check formatting
+        run: |
+          cd truncate/src-tauri
+          cargo fmt --all -- --check
+      - name: Clippy
+        run: |
+          cd truncate/src-tauri
+          cargo clippy -- -D warnings
