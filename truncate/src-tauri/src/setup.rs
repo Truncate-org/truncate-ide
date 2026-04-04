@@ -1,9 +1,7 @@
-use crate::error::TruncateError;
 use futures_util::StreamExt;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter};
 use tauri_plugin_shell::ShellExt;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

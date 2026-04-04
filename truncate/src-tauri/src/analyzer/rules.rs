@@ -21,14 +21,12 @@ impl AnalyzerRule for DestructiveStatementWarning {
         let mut results = Vec::new();
         for stmt in statements {
             match stmt {
-                Statement::Delete { selection, .. } => {
-                    if selection.is_none() {
-                        results.push(AnalysisResult {
-                            rule_name: self.name().to_string(),
-                            message: "A DELETE statement without a WHERE clause will erase all rows in the table.".to_string(),
-                            severity: Severity::Error,
-                        });
-                    }
+                Statement::Delete { selection, .. } if selection.is_none() => {
+                    results.push(AnalysisResult {
+                        rule_name: self.name().to_string(),
+                        message: "A DELETE statement without a WHERE clause will erase all rows in the table.".to_string(),
+                        severity: Severity::Error,
+                    });
                 }
                 Statement::Drop { .. } => {
                     results.push(AnalysisResult {

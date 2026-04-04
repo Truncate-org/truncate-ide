@@ -167,7 +167,7 @@ fn start_terminal_with_env(
         })
         .map_err(|e| e.to_string())?;
 
-    let mut cmd = CommandBuilder::new(&resolved_bin.to_string_lossy().to_string());
+    let mut cmd = CommandBuilder::new(resolved_bin.to_string_lossy().to_string());
 
     // Crucial fixes: Enrich the PATH so subprocesses spawned by the cli succeed
     CliDiscoveryService::enrich_cmd_env(&mut cmd, &resolved_bin);

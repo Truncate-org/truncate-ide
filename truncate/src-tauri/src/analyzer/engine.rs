@@ -8,6 +8,12 @@ pub struct SqlAnalyzer {
     rules: Vec<Box<dyn AnalyzerRule>>,
 }
 
+impl Default for SqlAnalyzer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SqlAnalyzer {
     /// Initializes the SQL Analyzer with a strict set of pre-registered rules.
     pub fn new() -> Self {

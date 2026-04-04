@@ -81,7 +81,7 @@ impl CliDiscoveryService {
 
     /// Enriches the Command's environment PATH variable with the directory where the
     /// resolved binary lives. This prevents subprocesses launched by the CLI from failing.
-    pub fn enrich_cmd_env(cmd: &mut portable_pty::CommandBuilder, resolved_bin: &PathBuf) {
+    pub fn enrich_cmd_env(cmd: &mut portable_pty::CommandBuilder, resolved_bin: &Path) {
         if let Some(parent) = resolved_bin.parent() {
             if let Some(current_path) = env::var_os("PATH") {
                 let mut paths = env::split_paths(&current_path).collect::<Vec<_>>();
