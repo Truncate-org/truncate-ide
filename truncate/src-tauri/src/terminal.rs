@@ -5,6 +5,7 @@ use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use tauri::{Emitter, State};
+use crate::services::cli_discovery::CliDiscoveryService;
 
 pub struct TerminalSession {
     pub writer: Box<dyn Write + Send>,
@@ -149,21 +150,10 @@ fn start_terminal_with_env(
     cwd: Option<String>,
     env: Option<HashMap<String, String>>,
 ) -> Result<(), String> {
-    // Proactive check for binary existence to give better error message
-    let resolved_bin = match get_binary_path(&bin) {
-        Some(path) => path,
-        None => {
-            let install_hint = match bin.as_str() {
-                "mysql" => "You can install it via 'brew install mysql-client' on macOS or 'sudo apt-get install mysql-client' on Linux.",
-                "psql" => "You can install it via 'brew install postgresql' on macOS or 'sudo apt-get install postgresql-client' on Linux.",
-                "sqlite3" => "You can install it via 'brew install sqlite' on macOS or 'sudo apt-get install sqlite3' on Linux.",
-                _ => "Please ensure the required CLI tool is installed and available in your PATH."
-            };
-            return Err(format!(
-                "The required database CLI tool '{}' was not found on your system. {}",
-                bin, install_hint
-            ));
-        }
+    // Proactive check for binary existence
+    let resolved_bin = match CliDiscoveryService::discover_cli(&bin) {
+        Ok(path) => path,
+        Err(e) => return Err(e.to_string()),
     };
 
     let pty_system = NativePtySystem::default();
@@ -177,7 +167,11 @@ fn start_terminal_with_env(
         })
         .map_err(|e| e.to_string())?;
 
-    let mut cmd = CommandBuilder::new(&resolved_bin);
+    let mut cmd = CommandBuilder::new(&resolved_bin.to_string_lossy().to_string());
+    
+    // Crucial fixes: Enrich the PATH so subprocesses spawned by the cli succeed
+    CliDiscoveryService::enrich_cmd_env(&mut cmd, &resolved_bin);
+
     cmd.args(&args);
 
     if let Some(dir) = cwd {
@@ -290,56 +284,4 @@ pub fn stop_terminal(state: State<'_, TerminalState>, id: String) -> Result<(), 
     }
 }
 
-fn get_binary_path(bin: &str) -> Option<String> {
-    use std::process::Command;
-
-    #[cfg(windows)]
-    let bin_with_ext = if bin.ends_with(".exe") {
-        bin.to_string()
-    } else {
-        format!("{}.exe", bin)
-    };
-    #[cfg(not(windows))]
-    let bin_with_ext = bin.to_string();
-
-    // 1. Check if it's already in the PATH
-    if Command::new(&bin_with_ext)
-        .arg("--version")
-        .output()
-        .is_ok()
-    {
-        return Some(bin_with_ext);
-    }
-
-    // 2. Search common paths (macOS/Linux only for now)
-    #[cfg(not(windows))]
-    {
-        let common_paths = vec![
-            "/opt/homebrew/bin",
-            "/usr/local/bin",
-            "/usr/bin",
-            "/bin",
-            "/opt/homebrew/opt/mysql-client/bin",
-            "/usr/local/opt/mysql-client/bin",
-            "/opt/homebrew/opt/libpq/bin", // psql client-only
-            "/usr/local/opt/libpq/bin",     // psql client-only
-        ];
-
-        for path in common_paths {
-            let full_path = std::path::Path::new(path).join(&bin_with_ext);
-            if full_path.exists() {
-                // Double check it's actually executable and works
-                if Command::new(&full_path).arg("--version").output().is_ok() {
-                    return Some(full_path.to_string_lossy().to_string());
-                }
-            }
-        }
-    }
-
-    None
-}
-
-#[allow(dead_code)]
-fn is_binary_available(bin: &str) -> bool {
-    get_binary_path(bin).is_some()
-}
+// Old discovery log removed

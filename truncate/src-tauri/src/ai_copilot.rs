@@ -7,7 +7,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Mutex;
 use tauri::{Emitter, State};
-use tauri_plugin_shell::{process::CommandChild, ShellExt};
 use tokio::task::AbortHandle;
 
 // -----------------------------------------------------------------------------
@@ -166,21 +165,7 @@ pub struct PullProgress {
     pub completed: Option<u64>,
 }
 
-#[tauri::command]
-pub async fn is_engine_installed(app: tauri::AppHandle) -> bool {
-    // Check if sidecar exists
-    let sidecar_exists = app.shell().sidecar("ollama").is_ok();
-
-    if sidecar_exists {
-        return true;
-    }
-
-    // Fallback: check system PATH
-    std::process::Command::new("ollama")
-        .arg("--version")
-        .output()
-        .is_ok()
-}
+// is_engine_installed moved to OllamaService as check_ollama_status
 
 #[tauri::command]
 pub async fn sync_engine_assets(window: tauri::Window) -> Result<(), String> {
@@ -349,31 +334,4 @@ async fn query_ollama(
     Ok(content)
 }
 
-// -----------------------------------------------------------------------------
-// 6. Sidecar
-// -----------------------------------------------------------------------------
-static OLLAMA_RUNNING: Mutex<Option<CommandChild>> = Mutex::new(None);
-
-pub fn start_ollama(app: &tauri::AppHandle) {
-    let mut running = OLLAMA_RUNNING.lock().unwrap();
-    if running.is_some() {
-        return;
-    }
-
-    // Try to spawn sidecar
-    if let Ok(sidecar) = app.shell().sidecar("ollama") {
-        match sidecar.args(["serve"]).spawn() {
-            Ok((_rx, child)) => {
-                *running = Some(child);
-            }
-            Err(_e) => {}
-        }
-    }
-}
-
-pub fn stop_ollama(_app: &tauri::AppHandle) {
-    let mut running = OLLAMA_RUNNING.lock().unwrap();
-    if let Some(child) = running.take() {
-        let _ = child.kill();
-    }
-}
+// Sidecar execution moved to services::ollama_service

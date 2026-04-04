@@ -4,19 +4,23 @@ use tauri::{Emitter, State}; // For path access
 
 pub mod adapter;
 pub mod ai_copilot;
+pub mod analyzer;
 pub mod api_proxy;
 pub mod csv_adapter;
 pub mod data_profiling;
 pub mod db_state;
+pub mod error;
 pub mod keychain;
 pub mod mysql_adapter;
 pub mod postgres_adapter;
 pub mod schema;
+pub mod services;
 pub mod sql_utils;
 pub mod sqlite_adapter;
 pub mod subscription;
 pub mod terminal;
 pub mod types;
+pub mod setup;
 
 use crate::adapter::{DatabaseAdapter, DbAdapter};
 use crate::csv_adapter::CsvAdapter;
@@ -102,12 +106,34 @@ async fn sql_run_query(
     window: tauri::Window,
     state: State<'_, DbState>,
     sql: String,
+    force: Option<bool>,
 ) -> Result<QueryResult, String> {
     let guard = state.adapter.lock().await;
     let adapter = guard.as_ref().ok_or("No active connection")?;
 
-    // Execute
-    let mut result = adapter.execute_query(&sql).await?;
+    let force_exe = force.unwrap_or(false);
+
+    // 1. Run AST analysis
+    if !force_exe {
+       let analyzer = crate::analyzer::engine::SqlAnalyzer::new();
+       let results = analyzer.analyze(&sql);
+       let errors: Vec<_> = results.into_iter().filter(|r| matches!(r.severity, crate::analyzer::types::Severity::Error)).collect();
+       
+       if !errors.is_empty() {
+           let prompt = errors.into_iter().map(|e| e.message).collect::<Vec<String>>().join("\n");
+           return Ok(QueryResult::ConfirmationRequired(crate::types::ConfirmationData {
+               prompt,
+               original_sql: sql.clone(),
+           }));
+       }
+    }
+
+    // 2. Execute. If forced, skip the adapter's MVP safety checks via raw_query
+    let mut result = if force_exe {
+        adapter.execute_raw_query(&sql).await?
+    } else {
+        adapter.execute_query(&sql).await?
+    };
 
     // Inject Formatted Text for Terminal
     if let QueryResult::ResultSet(ref mut preview) = result {
@@ -236,12 +262,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(DbState::new())
         .manage(TerminalState::new())
-        .setup(|app| {
-            // Start Ollama Sidecar
-            let handle = app.handle().clone();
-            tauri::async_runtime::spawn(async move {
-                ai_copilot::start_ollama(&handle);
-            });
+        .setup(|_app| {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -263,7 +284,8 @@ pub fn run() {
             inspect_csv,
             ai_copilot::ask_copilot,
             ai_copilot::check_ai_status,
-            ai_copilot::is_engine_installed,
+            crate::services::ollama_service::check_ollama_status,
+            crate::services::ollama_service::launch_ollama,
             ai_copilot::sync_engine_assets,
             ai_copilot::ask_audit_ai,
             run_data_profiling,
@@ -271,13 +293,14 @@ pub fn run() {
             keychain::get_keychain_token,
             keychain::delete_keychain_token,
             api_proxy::api_proxy,
-            subscription::get_subscription_status
+            subscription::get_subscription_status,
+            setup::initialize_ai
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|app_handle, event| {
+        .run(|_app_handle, event| {
             if let tauri::RunEvent::Exit = event {
-                ai_copilot::stop_ollama(app_handle);
+                crate::services::ollama_service::stop_ollama();
             }
         });
 }

@@ -15,9 +15,14 @@ export interface TablePreview {
     formatted_output?: string;
 }
 
+export interface ConfirmationData {
+    prompt: string;
+    original_sql: string;
+}
+
 export interface QueryResult {
-    type: 'ResultSet' | 'Success';
-    data: TablePreview | string;
+    type: 'ResultSet' | 'Success' | 'Error' | 'ConfirmationRequired';
+    data: TablePreview | string | ConfirmationData;
     executionDuration?: number;
 }
 
@@ -52,12 +57,14 @@ interface DatabaseStore {
     previewState: PreviewState;
     previewData: QueryResult | null;
     previewError: string | null;
+    confirmationData: ConfirmationData | null;
 
     // Actions
     connectServer: (dbType: string, host: string, port: number, user: string, pass: string) => Promise<void>;
     selectDatabase: (dbName: string) => Promise<void>;
     selectTable: (dbName: string, tableName: string) => Promise<void>;
-    runQuery: (sql: string) => Promise<void>;
+    runQuery: (sql: string, force?: boolean) => Promise<void>;
+    setConfirmationData: (data: ConfirmationData | null) => void;
     closeDatabase: () => void;
     disconnect: () => void;
 
@@ -110,6 +117,7 @@ export const useDatabaseStore = create<DatabaseStore>((set, get) => ({
     previewState: 'idle',
     previewData: null,
     previewError: null,
+    confirmationData: null,
 
     exportState: 'idle',
     exportResult: null,
@@ -250,7 +258,9 @@ export const useDatabaseStore = create<DatabaseStore>((set, get) => ({
         }
     },
 
-    runQuery: async (sql) => {
+    setConfirmationData: (data) => set({ confirmationData: data }),
+
+    runQuery: async (sql, force = false) => {
         set({
             previewState: 'loading',
             previewError: null,
@@ -276,16 +286,26 @@ export const useDatabaseStore = create<DatabaseStore>((set, get) => ({
         const startTime = performance.now();
 
         try {
-            const result = await invoke<QueryResult>('sql_run_query', { sql: cleanSql });
+            const result = await invoke<QueryResult>('sql_run_query', { sql: cleanSql, force });
             const endTime = performance.now();
             const duration = Math.round(endTime - startTime);
+
+            // Check if confirmation is required before proceeding
+            if (result.type === 'ConfirmationRequired') {
+                set({
+                    previewState: 'idle',
+                    confirmationData: result.data as ConfirmationData
+                });
+                return;
+            }
 
             // Inject duration into result (hacky since backend doesn't return it yet, but effective)
             result.executionDuration = duration;
 
             set({
                 previewState: 'result',
-                previewData: result
+                previewData: result,
+                confirmationData: null
             });
         } catch (error: any) {
             set({
