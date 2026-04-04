@@ -2,22 +2,33 @@ import React, { useEffect, useState } from 'react';
 import { useAiStore } from '../../store/aiStore';
 import { Terminal, Shield, Cpu, Activity, Zap, Loader2 } from 'lucide-react';
 
+import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
+
 const EngineSetupScreen: React.FC = () => {
-    const { isSyncing, syncProgress, startSync, isInstalled, checkIfInstalled, showSetup } = useAiStore();
+    const { isInstalled, checkIfInstalled, showSetup } = useAiStore();
     const [logs, setLogs] = useState<string[]>([]);
+    const [isSyncing, setIsSyncing] = useState(false);
+    const [progress, setProgress] = useState<{message: string, percent: number} | null>(null);
 
     useEffect(() => {
         checkIfInstalled();
     }, []);
 
     useEffect(() => {
-        if (syncProgress) {
+        if (progress) {
             setLogs(prev => {
-                const next = [...prev, `[${new Date().toLocaleTimeString()}] ${syncProgress.status}...`];
+                const next = [...prev, `[${new Date().toLocaleTimeString()}] ${progress.message}...`];
                 return next.slice(-8); // Keep last 8 logs
             });
+            if (progress.percent >= 100) {
+                setTimeout(() => {
+                    useAiStore.setState({ isInstalled: true });
+                    setIsSyncing(false);
+                }, 1000);
+            }
         }
-    }, [syncProgress]);
+    }, [progress]);
 
     useEffect(() => {
         if (showSetup && !isSyncing && !isInstalled) {
@@ -27,15 +38,21 @@ const EngineSetupScreen: React.FC = () => {
 
     const handleInitialize = () => {
         setLogs(["[SYSTEM] Initializing core synchronization..."]);
-        startSync();
+        setIsSyncing(true);
+        listen<{message: string, percent: number}>('setup-progress', (event) => {
+            setProgress(event.payload);
+        });
+        invoke('initialize_ai').catch(err => {
+            setLogs(prev => [...prev, `[ERROR] ${err}`]);
+            setIsSyncing(false);
+        });
     };
 
     if (!showSetup && !isSyncing) return null;
     if (isInstalled && !isSyncing) return null;
 
-    const progressValue = syncProgress?.total
-        ? Math.round((syncProgress.completed || 0) / syncProgress.total * 100)
-        : 0;
+    if (!showSetup && !isSyncing) return null;
+    if (isInstalled && !isSyncing) return null;
 
     return (
         <div className="fixed inset-0 z-[9999] bg-black flex flex-col items-center justify-center font-mono selection:bg-blue-500/30">
@@ -103,11 +120,11 @@ const EngineSetupScreen: React.FC = () => {
                                         Data Stream Integrity
                                     </div>
                                     <div className="text-lg font-black text-white italic tabular-nums">
-                                        SYNC_PHASE: {syncProgress?.status || 'Active'}
+                                        {progress?.message || 'SYNC_PHASE: Active...'}
                                     </div>
                                 </div>
                                 <div className="text-3xl font-black text-blue-400 italic tabular-nums">
-                                    {progressValue}%
+                                    {Math.round(progress?.percent || 0)}%
                                 </div>
                             </div>
 
@@ -115,7 +132,7 @@ const EngineSetupScreen: React.FC = () => {
                             <div className="h-3 bg-white/5 border border-white/10 rounded-full overflow-hidden relative">
                                 <div
                                     className="h-full bg-gradient-to-r from-blue-700 via-blue-400 to-blue-200 transition-all duration-500 relative"
-                                    style={{ width: `${progressValue || 2}%` }}
+                                    style={{ width: `${progress?.percent || 2}%` }}
                                 >
                                     <div className="absolute inset-0 bg-[linear-gradient(90deg,transparent_0%,rgba(255,255,255,0.4)_50%,transparent_100%)] animate-[shimmer_1.5s_infinite] w-[200px]" />
                                 </div>

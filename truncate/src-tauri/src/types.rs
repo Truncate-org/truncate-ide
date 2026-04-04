@@ -15,11 +15,18 @@ pub struct TablePreview {
 }
 
 #[derive(Serialize, Clone, Debug)]
+pub struct ConfirmationData {
+    pub prompt: String,
+    pub original_sql: String,
+}
+
+#[derive(Serialize, Clone, Debug)]
 #[serde(tag = "type", content = "data")]
 pub enum QueryResult {
     ResultSet(TablePreview),
     Success(String),
     Error(String),
+    ConfirmationRequired(ConfirmationData),
 }
 
 #[derive(Serialize, Clone, Debug)]

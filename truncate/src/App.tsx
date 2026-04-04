@@ -5,6 +5,8 @@ import { useAiStore } from "./store/aiStore";
 import EngineSetupScreen from "./components/Modals/EngineSetupScreen";
 import SettingsModal from "./components/Modals/SettingsModal";
 
+import ConfirmationModal from "./components/Modals/ConfirmationModal";
+
 function App() {
   const theme = useUiStore((state) => state.theme);
   const listenToEvents = useAiStore((state) => state.listenToEvents);
@@ -32,6 +34,7 @@ function App() {
       <ResizableLayout />
       <EngineSetupScreen />
       <SettingsModal />
+      <ConfirmationModal />
     </>
   );
 }
