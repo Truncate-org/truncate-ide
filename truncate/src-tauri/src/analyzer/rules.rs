@@ -33,21 +33,30 @@ impl AnalyzerRule for DestructiveStatementWarning {
                 Statement::Drop { .. } => {
                     results.push(AnalysisResult {
                         rule_name: self.name().to_string(),
-                        message: "A DROP statement will permanently destroy the object and its data.".to_string(),
+                        message:
+                            "A DROP statement will permanently destroy the object and its data."
+                                .to_string(),
                         severity: Severity::Error,
                     });
                 }
                 Statement::Truncate { .. } => {
                     results.push(AnalysisResult {
                         rule_name: self.name().to_string(),
-                        message: "A TRUNCATE statement will instantly remove all records from the table.".to_string(),
+                        message:
+                            "A TRUNCATE statement will instantly remove all records from the table."
+                                .to_string(),
                         severity: Severity::Error,
                     });
                 }
-                Statement::AlterTable { .. } | Statement::AlterIndex { .. } | Statement::AlterView { .. } | Statement::AlterRole { .. } => {
+                Statement::AlterTable { .. }
+                | Statement::AlterIndex { .. }
+                | Statement::AlterView { .. }
+                | Statement::AlterRole { .. } => {
                     results.push(AnalysisResult {
                         rule_name: self.name().to_string(),
-                        message: "An ALTER statement will modify the structural schema of the database.".to_string(),
+                        message:
+                            "An ALTER statement will modify the structural schema of the database."
+                                .to_string(),
                         severity: Severity::Error,
                     });
                 }
@@ -73,7 +82,8 @@ impl AnalyzerRule for EnforceSmartLimit {
     fn explain(&self) -> RuleExplanation {
         RuleExplanation {
             name: self.name().to_string(),
-            description: "Ensures that all SELECT operations have a concrete upper boundary.".to_string(),
+            description: "Ensures that all SELECT operations have a concrete upper boundary."
+                .to_string(),
             fix_strategy: "Appends LIMIT 1000 to the query if no limit is specified.".to_string(),
         }
     }
@@ -86,7 +96,8 @@ impl AnalyzerRule for EnforceSmartLimit {
                 if q.limit.is_none() {
                     results.push(AnalysisResult {
                         rule_name: self.name().to_string(),
-                        message: "Query lacks a LIMIT clause. It may return excessive rows.".to_string(),
+                        message: "Query lacks a LIMIT clause. It may return excessive rows."
+                            .to_string(),
                         severity: Severity::Warning,
                     });
                 }
@@ -103,7 +114,7 @@ impl AnalyzerRule for EnforceSmartLimit {
             if let Statement::Query(ref mut q) = stmt {
                 if q.limit.is_none() {
                     use sqlparser::ast::{Expr, Value};
-                    
+
                     // Simple injection of LIMIT 1000
                     q.limit = Some(Expr::Value(Value::Number("1000".to_string(), false)));
                     modified = true;

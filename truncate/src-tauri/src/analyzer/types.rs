@@ -26,7 +26,7 @@ pub trait AnalyzerRule: Send + Sync {
     /// Returns the unique name of the rule.
     fn name(&self) -> &str;
 
-    /// Returns a human-readable explanation of the rule, 
+    /// Returns a human-readable explanation of the rule,
     /// why it fails, and how it is fixed.
     fn explain(&self) -> RuleExplanation;
 

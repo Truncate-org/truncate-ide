@@ -15,12 +15,12 @@ pub mod mysql_adapter;
 pub mod postgres_adapter;
 pub mod schema;
 pub mod services;
+pub mod setup;
 pub mod sql_utils;
 pub mod sqlite_adapter;
 pub mod subscription;
 pub mod terminal;
 pub mod types;
-pub mod setup;
 
 use crate::adapter::{DatabaseAdapter, DbAdapter};
 use crate::csv_adapter::CsvAdapter;
@@ -115,17 +115,26 @@ async fn sql_run_query(
 
     // 1. Run AST analysis
     if !force_exe {
-       let analyzer = crate::analyzer::engine::SqlAnalyzer::new();
-       let results = analyzer.analyze(&sql);
-       let errors: Vec<_> = results.into_iter().filter(|r| matches!(r.severity, crate::analyzer::types::Severity::Error)).collect();
-       
-       if !errors.is_empty() {
-           let prompt = errors.into_iter().map(|e| e.message).collect::<Vec<String>>().join("\n");
-           return Ok(QueryResult::ConfirmationRequired(crate::types::ConfirmationData {
-               prompt,
-               original_sql: sql.clone(),
-           }));
-       }
+        let analyzer = crate::analyzer::engine::SqlAnalyzer::new();
+        let results = analyzer.analyze(&sql);
+        let errors: Vec<_> = results
+            .into_iter()
+            .filter(|r| matches!(r.severity, crate::analyzer::types::Severity::Error))
+            .collect();
+
+        if !errors.is_empty() {
+            let prompt = errors
+                .into_iter()
+                .map(|e| e.message)
+                .collect::<Vec<String>>()
+                .join("\n");
+            return Ok(QueryResult::ConfirmationRequired(
+                crate::types::ConfirmationData {
+                    prompt,
+                    original_sql: sql.clone(),
+                },
+            ));
+        }
     }
 
     // 2. Execute. If forced, skip the adapter's MVP safety checks via raw_query
@@ -262,9 +271,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(DbState::new())
         .manage(TerminalState::new())
-        .setup(|_app| {
-            Ok(())
-        })
+        .setup(|_app| Ok(()))
         .invoke_handler(tauri::generate_handler![
             connect_server,
             select_database,

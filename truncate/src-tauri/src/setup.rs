@@ -1,10 +1,10 @@
+use crate::error::TruncateError;
 use futures_util::StreamExt;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_shell::ShellExt;
-use crate::error::TruncateError;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct PullProgress {
@@ -68,18 +68,24 @@ pub async fn initialize_ai(app: AppHandle) -> Result<(), String> {
     let model_to_pull = "qwen2.5-coder:latest";
 
     // 1. Initial Emit
-    let _ = app.emit("setup-progress", SetupProgressEvent {
-        message: "Starting engine...".to_string(),
-        percent: 5.0,
-    });
+    let _ = app.emit(
+        "setup-progress",
+        SetupProgressEvent {
+            message: "Starting engine...".to_string(),
+            percent: 5.0,
+        },
+    );
 
     // 2. Discover/Launch Sidecar if HTTP ping fails
     let ping_res = client.get("http://127.0.0.1:11434/").send().await;
     if ping_res.is_err() {
-        let _ = app.emit("setup-progress", SetupProgressEvent {
-            message: "Launching private AI kernel...".to_string(),
-            percent: 10.0,
-        });
+        let _ = app.emit(
+            "setup-progress",
+            SetupProgressEvent {
+                message: "Launching private AI kernel...".to_string(),
+                percent: 10.0,
+            },
+        );
 
         // Launch sidecar correctly using Tauri Shell API
         match app.shell().sidecar("ollama") {
@@ -90,17 +96,23 @@ pub async fn initialize_ai(app: AppHandle) -> Result<(), String> {
                 tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
             }
             Err(e) => {
-                return Err(format!("Failed to retrieve sidecar: {}. Ensure binaries are built.", e));
+                return Err(format!(
+                    "Failed to retrieve sidecar: {}. Ensure binaries are built.",
+                    e
+                ));
             }
         }
     }
 
     // 3. Check if Model exists
     if is_model_installed(&client, "qwen2.5-coder").await {
-        let _ = app.emit("setup-progress", SetupProgressEvent {
-            message: "Ready.".to_string(),
-            percent: 100.0,
-        });
+        let _ = app.emit(
+            "setup-progress",
+            SetupProgressEvent {
+                message: "Ready.".to_string(),
+                percent: 100.0,
+            },
+        );
         return Ok(()); // We're fully setup
     }
 
@@ -111,7 +123,12 @@ pub async fn initialize_ai(app: AppHandle) -> Result<(), String> {
         "stream": true
     });
 
-    let res = client.post(url).json(&payload).send().await.map_err(|e| e.to_string())?;
+    let res = client
+        .post(url)
+        .json(&payload)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
     let mut stream = res.bytes_stream();
 
     while let Some(item) = stream.next().await {
@@ -135,10 +152,13 @@ pub async fn initialize_ai(app: AppHandle) -> Result<(), String> {
                     percent = 100.0;
                 }
 
-                let _ = app.emit("setup-progress", SetupProgressEvent {
-                    message: friendly_message,
-                    percent,
-                });
+                let _ = app.emit(
+                    "setup-progress",
+                    SetupProgressEvent {
+                        message: friendly_message,
+                        percent,
+                    },
+                );
             }
         }
     }

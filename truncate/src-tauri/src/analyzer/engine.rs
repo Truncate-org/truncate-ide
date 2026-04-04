@@ -1,4 +1,4 @@
-use crate::analyzer::rules::{EnforceSmartLimit, DestructiveStatementWarning};
+use crate::analyzer::rules::{DestructiveStatementWarning, EnforceSmartLimit};
 use crate::analyzer::types::{AnalysisResult, AnalyzerRule, RuleExplanation};
 use crate::error::TruncateError;
 use sqlparser::dialect::GenericDialect;
@@ -45,11 +45,10 @@ impl SqlAnalyzer {
     /// Runs all `auto_fix` mutating logic over the raw AST and returns the stitched SQL string.
     pub fn auto_fix(&self, sql: &str) -> Result<String, TruncateError> {
         let dialect = GenericDialect {};
-        let mut ast = Parser::parse_sql(&dialect, sql).map_err(|e| {
-            TruncateError::InternalError {
+        let mut ast =
+            Parser::parse_sql(&dialect, sql).map_err(|e| TruncateError::InternalError {
                 message: format!("Failed to parse SQL for auto-fix: {}", e),
-            }
-        })?;
+            })?;
 
         let mut was_modified = false;
 
@@ -77,6 +76,9 @@ impl SqlAnalyzer {
 
     /// Retrieves the structural explanation of any registered rule.
     pub fn explain_rule(&self, name: &str) -> Option<RuleExplanation> {
-        self.rules.iter().find(|r| r.name() == name).map(|r| r.explain())
+        self.rules
+            .iter()
+            .find(|r| r.name() == name)
+            .map(|r| r.explain())
     }
 }

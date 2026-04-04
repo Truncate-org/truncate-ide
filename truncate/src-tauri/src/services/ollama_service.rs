@@ -24,7 +24,7 @@ pub struct OllamaService;
 
 impl OllamaService {
     /// Checks the current status of the Ollama service.
-    /// Returns 
+    /// Returns
     /// - `Running(models)` if HTTP connects successfully.
     /// - `NotRunning` if HTTP fails but the CLI is found on the system.
     /// - `NotInstalled` if HTTP fails and CLI is not found.
@@ -64,9 +64,9 @@ impl OllamaService {
 }
 
 // --- process tracking ---
-use std::sync::Mutex;
-use std::process::Child;
 use once_cell::sync::Lazy;
+use std::process::Child;
+use std::sync::Mutex;
 
 static OLLAMA_PROCESS: Lazy<Mutex<Option<Child>>> = Lazy::new(|| Mutex::new(None));
 
@@ -86,10 +86,7 @@ pub async fn launch_ollama(_app: tauri::AppHandle) -> Result<(), TruncateError> 
 
     let cli_path = CliDiscoveryService::discover_cli("ollama")?;
 
-    match std::process::Command::new(cli_path)
-        .arg("serve")
-        .spawn()
-    {
+    match std::process::Command::new(cli_path).arg("serve").spawn() {
         Ok(child) => {
             *proc_guard = Some(child);
             Ok(())

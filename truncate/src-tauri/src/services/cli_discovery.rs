@@ -39,21 +39,33 @@ impl CliDiscoveryService {
         let hint = match tool_name.as_str() {
             "mysql" | "mysql.exe" => {
                 #[cfg(windows)]
-                { "Please install MySQL and ensure it is in your C:\\Program Files\\MySQL directory." }
+                {
+                    "Please install MySQL and ensure it is in your C:\\Program Files\\MySQL directory."
+                }
                 #[cfg(not(windows))]
-                { "You can install it via 'brew install mysql-client' on macOS or 'sudo apt-get install mysql-client' on Linux." }
+                {
+                    "You can install it via 'brew install mysql-client' on macOS or 'sudo apt-get install mysql-client' on Linux."
+                }
             }
             "psql" | "psql.exe" => {
                 #[cfg(windows)]
-                { "Please install PostgreSQL and ensure it is in your C:\\Program Files\\PostgreSQL directory." }
+                {
+                    "Please install PostgreSQL and ensure it is in your C:\\Program Files\\PostgreSQL directory."
+                }
                 #[cfg(not(windows))]
-                { "You can install it via 'brew install postgresql' on macOS or 'sudo apt-get install postgresql-client' on Linux." }
+                {
+                    "You can install it via 'brew install postgresql' on macOS or 'sudo apt-get install postgresql-client' on Linux."
+                }
             }
             "sqlite3" | "sqlite3.exe" => {
                 #[cfg(windows)]
-                { "Please download sqlite3.exe and add it to your PATH." }
+                {
+                    "Please download sqlite3.exe and add it to your PATH."
+                }
                 #[cfg(not(windows))]
-                { "You can install it via 'brew install sqlite' on macOS or 'sudo apt-get install sqlite3' on Linux." }
+                {
+                    "You can install it via 'brew install sqlite' on macOS or 'sudo apt-get install sqlite3' on Linux."
+                }
             }
             "ollama" | "ollama.exe" => {
                 "Please download and install Ollama from https://ollama.com/download"
@@ -67,7 +79,7 @@ impl CliDiscoveryService {
         })
     }
 
-    /// Enriches the Command's environment PATH variable with the directory where the 
+    /// Enriches the Command's environment PATH variable with the directory where the
     /// resolved binary lives. This prevents subprocesses launched by the CLI from failing.
     pub fn enrich_cmd_env(cmd: &mut portable_pty::CommandBuilder, resolved_bin: &PathBuf) {
         if let Some(parent) = resolved_bin.parent() {
@@ -88,7 +100,7 @@ impl CliDiscoveryService {
 
     #[cfg(windows)]
     fn get_common_paths() -> Vec<&'static str> {
-        // We could also dynamically search C:\Program Files\MySQL\*\bin but 
+        // We could also dynamically search C:\Program Files\MySQL\*\bin but
         // string iter is okay for hardcoded constraints.
         vec![
             "C:\\Program Files\\MySQL\\MySQL Server 8.0\\bin", // Provide more common versions as needed

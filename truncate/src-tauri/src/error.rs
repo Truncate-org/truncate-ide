@@ -1,5 +1,5 @@
-use serde::{Serialize, Serializer};
 use serde::ser::SerializeStruct;
+use serde::{Serialize, Serializer};
 use std::fmt;
 
 #[derive(Debug)]
@@ -48,7 +48,10 @@ impl Serialize for TruncateError {
     {
         let mut state = serializer.serialize_struct("TruncateError", 3)?;
         match self {
-            Self::CliNotFound { tool: _, install_hint } => {
+            Self::CliNotFound {
+                tool: _,
+                install_hint,
+            } => {
                 state.serialize_field("code", "CLI_NOT_FOUND")?;
                 state.serialize_field("message", &self.to_string())?;
                 state.serialize_field("hint", &Some(install_hint))?;
@@ -68,7 +71,10 @@ impl Serialize for TruncateError {
                 state.serialize_field("message", &self.to_string())?;
                 state.serialize_field("hint", &None::<String>)?;
             }
-            Self::QuerySafetyViolation { query: _, reason: _ } => {
+            Self::QuerySafetyViolation {
+                query: _,
+                reason: _,
+            } => {
                 state.serialize_field("code", "QUERY_SAFETY_VIOLATION")?;
                 state.serialize_field("message", &self.to_string())?;
                 state.serialize_field("hint", &None::<String>)?;
