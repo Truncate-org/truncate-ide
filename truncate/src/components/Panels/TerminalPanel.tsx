@@ -92,10 +92,6 @@ function TerminalPanelInner({ readOnly = true, setReadOnly: _setReadOnly = () =>
     const pendingActionRef = useRef<{ type: 'DB_REFRESH' | 'TABLE_REFRESH' | 'DB_SWITCH', payload?: string } | null>(null);
     const lastSyncedDbRef = useRef<string | null>(null);
 
-    // Regex Constants
-    const DB_REFRESH_REGEX = /^(CREATE|DROP|ALTER)\s+DATABASE/i;
-    const TABLE_REFRESH_REGEX = /^(CREATE|DROP|ALTER|TRUNCATE)\s+TABLE/i;
-
     const instanceIdRef = useRef(`term-${Math.random().toString(36).substr(2, 9)}`);
 
     // Helper: Send raw data to PTY
@@ -157,8 +153,12 @@ function TerminalPanelInner({ readOnly = true, setReadOnly: _setReadOnly = () =>
             pendingActionRef.current = { type: 'TABLE_REFRESH' };
         } else if (useMatch && useMatch[1]) {
             pendingActionRef.current = { type: 'DB_SWITCH', payload: useMatch[1] };
-        } else {
-            pendingActionRef.current = null;
+        } else if (trimmed && !trimmed.startsWith('--')) {
+            // Only clear pending action if the new input is an actual command that doesn't match
+            // and we aren't already waiting for an execution to finish.
+            if (!isExecutingRef.current) {
+                pendingActionRef.current = null;
+            }
         }
 
         // 4. Check if statement is complete (ends with ;) or if it's a non-SQL command
@@ -383,29 +383,47 @@ function TerminalPanelInner({ readOnly = true, setReadOnly: _setReadOnly = () =>
                         if (isExecutingRef.current) {
                             isExecutingRef.current = false;
                             setIsExecuting(false);
+
+                            // TRIGGER REFRESH ON COMPLETION:
+                            // If a DDL was pending and we just returned to prompt, 
+                            // refresh to catch changes even if the DB didn't output a specific success string.
+                            if (pendingActionRef.current) {
+                                logger.log("[Terminal Sync] Command finished, triggering pending refresh");
+                                setTimeout(() => {
+                                    if (pendingActionRef.current?.type === 'DB_REFRESH') refreshDatabases();
+                                    if (pendingActionRef.current?.type === 'TABLE_REFRESH') refreshTables();
+                                    pendingActionRef.current = null;
+                                }, 150); // Small delay to ensure backend state is stable
+                            }
                         }
                     }
 
-                    // Detect DB/table changes from PTY output
-                    if (data.includes("Query OK")) {
-                        if (pendingActionRef.current?.type === 'DB_REFRESH') refreshDatabases();
-                        if (pendingActionRef.current?.type === 'TABLE_REFRESH') refreshTables();
-                        pendingActionRef.current = null;
+                    // Detect DB/table changes from PTY output (Aggressive detection)
+                    const lowerData = data.toLowerCase();
+                    const hasQueryOk = lowerData.includes("query ok");
+                    const hasPostgresSuccess = /^(DROP|CREATE|ALTER|TRUNCATE)\s+(TABLE|DATABASE)/i.test(cleanData);
+
+                    if (hasQueryOk || hasPostgresSuccess) {
+                        // Small delay to ensure DB internal metadata is updated before list_tables runs
+                        setTimeout(() => {
+                            if (pendingActionRef.current?.type === 'DB_REFRESH') refreshDatabases();
+                            if (pendingActionRef.current?.type === 'TABLE_REFRESH') refreshTables();
+                            if (hasPostgresSuccess && !pendingActionRef.current) {
+                                // Fallback for cases where regex sniff missed the input
+                                refreshTables();
+                                refreshDatabases();
+                            }
+                            pendingActionRef.current = null;
+                        }, 100);
                     }
-                    else if (DB_REFRESH_REGEX.test(cleanData)) {
-                        refreshDatabases();
-                    }
-                    else if (TABLE_REFRESH_REGEX.test(cleanData)) {
-                        refreshTables();
-                    }
-                    else if (data.includes("Database changed")) {
+                    else if (data.includes("Database changed") || lowerData.includes("database changed")) {
                         if (pendingActionRef.current?.type === 'DB_SWITCH' && pendingActionRef.current.payload) {
                             const db = pendingActionRef.current.payload;
                             lastSyncedDbRef.current = db;
                             selectDatabase(db).catch(e => logger.error("[Terminal Sync Error]", e));
                             pendingActionRef.current = null;
                         }
-                    } else if (data.includes("ERROR") || data.includes("fatal:")) {
+                    } else if (lowerData.includes("error") || lowerData.includes("fatal:")) {
                         pendingActionRef.current = null;
                         if (isExecutingRef.current) {
                             isExecutingRef.current = false;
