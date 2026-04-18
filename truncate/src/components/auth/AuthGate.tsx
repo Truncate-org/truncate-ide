@@ -1,10 +1,13 @@
 import React, { useEffect } from "react";
-import { useAuthStore } from "../../store/authStore"; // Auth state management
+import { useAuthStore } from "../../store/authStore";
 import { useAuth } from "../../hooks/useAuth";
 import LoginScreen from "./LoginScreen";
 import CreditsExhausted from "./CreditsExhausted.tsx";
 import { Loader2 } from "lucide-react";
-import { logger } from "../../lib/logger";
+
+// Module-level flag: survives React StrictMode's unmount/remount cycle
+// so verify() is guaranteed to run exactly once per app session.
+let verifyRan = false;
 
 interface AuthGateProps {
   children: React.ReactNode;
@@ -12,19 +15,19 @@ interface AuthGateProps {
 
 const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
   const { verify } = useAuth();
-  const { 
-    isAuthenticated, 
-    isInitialLoading, 
-    subscription 
-  } = useAuthStore();
 
+  // Granular selectors — each only re-renders when its own value changes
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const isInitialLoading = useAuthStore((s) => s.isInitialLoading);
+  const subscription = useAuthStore((s) => s.subscription);
+
+  // Guard to prevent verify() running more than once (React StrictMode safe)
   useEffect(() => {
-    logger.log("AuthGate: Initiating verify...");
+    if (verifyRan) return;
+    verifyRan = true;
     verify();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  logger.log("AuthGate Rendering:", { isAuthenticated, isInitialLoading, hasSub: !!subscription });
 
   // 1. Startup Loading State
   if (isInitialLoading) {
@@ -45,9 +48,8 @@ const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
 
   // 3. Subscription Check
   const isExpired = subscription?.status === "expired";
-  const isExhausted = subscription?.credits_remaining === 0;
 
-  if (isExpired || isExhausted) {
+  if (isExpired) {
     return <CreditsExhausted />;
   }
 

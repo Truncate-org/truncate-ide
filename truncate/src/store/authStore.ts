@@ -25,6 +25,7 @@ interface AuthState {
   setAuth: (user: User, subscription: Subscription) => void;
   setInitialLoading: (loading: boolean) => void;
   clearAuth: () => void;
+  setAuthenticated: (isAuth: boolean) => void;
 }
 
 /**
@@ -37,10 +38,10 @@ export const useAuthStore = create<AuthState>((set) => ({
   isAuthenticated: false,
   isInitialLoading: true,
   
-  setUser: (user) => set({ 
+  setUser: (user) => set((state) => ({ 
     user, 
-    isAuthenticated: !!user 
-  }),
+    isAuthenticated: true 
+  })),
   
   setSubscription: (subscription) => set({ subscription }),
   
@@ -59,4 +60,6 @@ export const useAuthStore = create<AuthState>((set) => ({
     isAuthenticated: false,
     isInitialLoading: false
   }),
+  
+  setAuthenticated: (isAuth) => set({ isAuthenticated: isAuth }),
 }));

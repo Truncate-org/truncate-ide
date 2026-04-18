@@ -14,26 +14,32 @@ export const keychain = {
    */
   async setToken(token: string): Promise<void> {
     try {
-      // 1. Try OS Keychain (Mandatory for high-stakes sectors)
+      // 1. Try OS Keychain (Primary)
       await invoke("set_keychain_token", { token });
       logger.log("Token saved to OS Keychain");
     } catch (error) {
-      logger.error("Critical Security Error: OS Keychain unavailable.", error);
-      throw new Error("Failed to secure auth token. Please ensure your OS Keychain is accessible.");
+      logger.warn("OS Keychain unavailable, using fallback.", error);
+    } finally {
+      // 2. Always set localStorage as fallback
+      localStorage.setItem("truncate_ide_token", token);
     }
   },
 
   getToken: async () => {
     try {
       // 1. Try OS Keychain first
-      return await invoke<string>("get_keychain_token");
+      const token = await invoke<string>("get_keychain_token");
+      if (token) return token;
     } catch (err) {
-      logger.error("Keychain retrieval failed:", err);
-      return null;
+      logger.warn("Keychain retrieval failed, trying fallback:", err);
     }
+    
+    // 2. Fallback to localStorage
+    return localStorage.getItem("truncate_ide_token");
   },
 
   deleteToken: async () => {
+    localStorage.removeItem("truncate_ide_token");
     try {
       await invoke("delete_keychain_token");
     } catch (err) {

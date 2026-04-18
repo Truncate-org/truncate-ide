@@ -67,9 +67,12 @@ interface TerminalPanelProps {
 }
 
 function TerminalPanelInner({ readOnly = true, setReadOnly: _setReadOnly = () => { }, isVisible = true }: TerminalPanelProps) {
+    // Terminal state refs
     const terminalRef = useRef<HTMLDivElement>(null);
     const xtermRef = useRef<Terminal | null>(null);
     const fitAddonRef = useRef<FitAddon | null>(null);
+    // True only after the terminal's renderer is fully initialized
+    const isTermReadyRef = useRef(false);
 
     // UI State
     const [showConfirm, setShowConfirm] = useState(false);
@@ -231,10 +234,32 @@ function TerminalPanelInner({ readOnly = true, setReadOnly: _setReadOnly = () =>
         const fitAddon = new FitAddon();
         term.loadAddon(fitAddon);
         term.open(terminalRef.current);
-        fitAddon.fit();
 
         xtermRef.current = term;
         fitAddonRef.current = fitAddon;
+
+        // Safe fit: only runs after the renderer is confirmed ready (isTermReadyRef)
+        const safeFit = () => {
+            if (!isTermReadyRef.current) return;
+            const fa = fitAddonRef.current;
+            const container = terminalRef.current;
+            if (!fa || !container) return;
+            try {
+                fa.fit();
+                const dims = fa.proposeDimensions();
+                if (dims && dims.rows > 0 && dims.cols > 0 && useDatabaseStore.getState().isConnected) {
+                    invoke('resize_terminal', { id: instanceIdRef.current, rows: dims.rows, cols: dims.cols });
+                }
+            } catch (e) {
+                logger.debug('[Terminal] safeFit skipped:', e);
+            }
+        };
+
+        // Delay initial fit — xterm's canvas renderer needs ~1 frame to initialize
+        const initFitTimer = setTimeout(() => {
+            isTermReadyRef.current = true;
+            safeFit();
+        }, 150);
 
         // Helper to redraw line during editing (arrow keys, history)
         const redrawLine = (newBuffer: string, newCursor: number) => {
@@ -445,36 +470,26 @@ function TerminalPanelInner({ readOnly = true, setReadOnly: _setReadOnly = () =>
             }
         });
 
-        // Resize Observer
+        // Resize Observer — use safeFit to guard against uninitialized renderer
         const resizeObserver = new ResizeObserver(() => {
-            // Track focus state before resize
             wasFocusedRef.current = document.activeElement === term.textarea;
 
             requestAnimationFrame(() => {
-                try {
-                    fitAddon.fit();
-                    const dims = fitAddon.proposeDimensions();
-                    if (dims && useDatabaseStore.getState().isConnected) {
-                        invoke('resize_terminal', { id: instanceIdRef.current, rows: dims.rows, cols: dims.cols });
-                    }
-                    // Restore focus if it was focused before resize
-                    if (wasFocusedRef.current) {
-                        term.focus();
-                    }
-                } catch (e) {
-                    // Ignore fit errors during rapid resizing
-                }
+                safeFit();
+                if (wasFocusedRef.current) xtermRef.current?.focus();
             });
         });
         resizeObserver.observe(terminalRef.current);
 
         return () => {
+            clearTimeout(initFitTimer);
             const currentId = instanceIdRef.current;
             invoke('stop_terminal', { id: currentId }).catch(() => { });
-            term.dispose();
             resizeObserver.disconnect();
             unlisten.then(f => f());
             unlistenExit.then(f => f());
+            // Dispose after cleanup to avoid rendering to a dead canvas
+            setTimeout(() => term.dispose(), 0);
         };
     }, []);
 
@@ -487,12 +502,19 @@ function TerminalPanelInner({ readOnly = true, setReadOnly: _setReadOnly = () =>
 
             xtermRef.current?.clear();
             invoke('start_terminal_auto', { id: instanceIdRef.current }).then(() => {
+                // Use a longer delay to ensure panel layout is settled before fit
                 setTimeout(() => {
-                    fitAddonRef.current?.fit();
-                    const dims = fitAddonRef.current?.proposeDimensions();
-                    if (dims) invoke('resize_terminal', { id: instanceIdRef.current, rows: dims.rows, cols: dims.cols });
-                    xtermRef.current?.focus();
-                }, 100);
+                    try {
+                        fitAddonRef.current?.fit();
+                        const dims = fitAddonRef.current?.proposeDimensions();
+                        if (dims && dims.rows > 0 && dims.cols > 0) {
+                            invoke('resize_terminal', { id: instanceIdRef.current, rows: dims.rows, cols: dims.cols });
+                        }
+                        xtermRef.current?.focus();
+                    } catch (e) {
+                        logger.debug('[Terminal] Post-connect fit failed:', e);
+                    }
+                }, 200);
             }).catch(e => {
                 xtermRef.current?.write(`\r\n\x1b[31mFailed to launch terminal: ${e}\x1b[0m\r\n`);
             });

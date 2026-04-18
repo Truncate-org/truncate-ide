@@ -9,15 +9,15 @@ import logo from "../../assets/logo.png";
 const LoginScreen: React.FC = () => {
   const { login } = useAuth();
   const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
+  const [secretKey, setSecretKey] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showPassword, setShowPassword] = useState(false);
+  const [showSecret, setShowSecret] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!username || !password) {
-      setError("Please enter both username and password.");
+    if (!username || !secretKey) {
+      setError("Please enter both username and secret key.");
       return;
     }
 
@@ -25,12 +25,12 @@ const LoginScreen: React.FC = () => {
     setError(null);
 
     try {
-      await login(username, password);
+      await login(username, secretKey);
     } catch (err: any) {
       if (err.status === 401) {
-        setError("Incorrect username or password");
+        setError("Invalid username or secret key");
       } else if (err.status === 403) {
-        setError("Account suspended. Visit account.truncateide.app");
+        setError("Access denied. Please check your subscription.");
       } else if (err.status === 429) {
         setError("Too many attempts. Please wait a few minutes.");
       } else {
@@ -59,39 +59,39 @@ const LoginScreen: React.FC = () => {
         <form onSubmit={handleSubmit} className="w-full flex flex-col gap-4">
           {/* Username */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-medium text-gray-400 ml-1">Username</label>
+            <label className="text-xs font-medium text-gray-400 ml-1">Portal Username</label>
             <input
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               disabled={isLoading}
               className="w-full bg-[#2d2d2d] border border-[#3e3e3e] rounded-md px-3 py-2 text-sm text-white focus:outline-none focus:border-[#007acc] focus:ring-1 focus:ring-[#007acc] transition-all disabled:opacity-50"
-              placeholder="Enter username"
+              placeholder="Username"
               autoComplete="username"
             />
           </div>
 
-          {/* Password */}
+          {/* Secret Key */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-medium text-gray-400 ml-1">Password</label>
+            <label className="text-xs font-medium text-gray-400 ml-1">Secret Key (Passkey)</label>
             <div className="relative group/pass">
               <input
-                type={showPassword ? "text" : "password"}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                type={showSecret ? "text" : "password"}
+                value={secretKey}
+                onChange={(e) => setSecretKey(e.target.value)}
                 disabled={isLoading}
                 className="w-full bg-[#2d2d2d] border border-[#3e3e3e] rounded-md pl-3 pr-10 py-2 text-sm text-white focus:outline-none focus:border-[#007acc] focus:ring-1 focus:ring-[#007acc] transition-all disabled:opacity-50"
-                placeholder="Enter password"
+                placeholder="Enter secret key"
                 autoComplete="current-password"
               />
               <button
                 type="button"
-                onClick={() => setShowPassword(!showPassword)}
+                onClick={() => setShowSecret(!showSecret)}
                 disabled={isLoading}
                 className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-gray-500 hover:text-gray-300 transition-colors disabled:opacity-50"
-                title={showPassword ? "Hide password" : "Show password"}
+                title={showSecret ? "Hide key" : "Show key"}
               >
-                {showPassword ? (
+                {showSecret ? (
                   <EyeOff className="w-4 h-4" />
                 ) : (
                   <Eye className="w-4 h-4" />
@@ -119,7 +119,7 @@ const LoginScreen: React.FC = () => {
             )}
           >
             {isLoading && <Loader2 className="w-4 h-4 animate-spin" />}
-            {isLoading ? "Signing in..." : "Sign in"}
+            {isLoading ? "Authenticating..." : "Authorize IDE"}
           </button>
         </form>
 
@@ -129,7 +129,7 @@ const LoginScreen: React.FC = () => {
             onClick={handleOpenSite}
             className="group flex items-center gap-1.5 text-[11px] text-gray-500 hover:text-[#cccccc] transition-colors"
           >
-            Manage account or sign up
+            Find your secret key in portal
             <ExternalLink className="w-3 h-3 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
           </button>
           <span className="text-[10px] text-gray-600">account.truncateide.app</span>

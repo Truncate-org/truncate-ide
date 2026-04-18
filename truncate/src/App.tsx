@@ -4,6 +4,7 @@ import { useUiStore } from "./store/uiStore";
 import { useAiStore } from "./store/aiStore";
 import EngineSetupScreen from "./components/Modals/EngineSetupScreen";
 import SettingsModal from "./components/Modals/SettingsModal";
+import AuthGate from "./components/auth/AuthGate";
 
 import ConfirmationModal from "./components/Modals/ConfirmationModal";
 
@@ -30,12 +31,12 @@ function App() {
   }, [listenToEvents]);
 
   return (
-    <>
+    <AuthGate>
       <ResizableLayout />
       <EngineSetupScreen />
       <SettingsModal />
       <ConfirmationModal />
-    </>
+    </AuthGate>
   );
 }
 
