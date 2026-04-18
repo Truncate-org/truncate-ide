@@ -37,7 +37,8 @@
       "icons/icon.ico"
     ],
     "resources": [
-      "bin/dot-aarch64-apple-darwin"
+      "bin/dot-aarch64-apple-darwin",
+      "bin/dot-x86_64-unknown-linux-gnu"
     ],
     "externalBin": [
       "binaries/ollama"

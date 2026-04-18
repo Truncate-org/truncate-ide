@@ -37,29 +37,29 @@ export const useAuthStore = create<AuthState>((set) => ({
   subscription: null,
   isAuthenticated: false,
   isInitialLoading: true,
-  
-  setUser: (user) => set((state) => ({ 
+
+  setUser: (user) => set((_state) => ({ 
     user, 
     isAuthenticated: true 
   })),
-  
+
   setSubscription: (subscription) => set({ subscription }),
-  
-  setAuth: (user, subscription) => set({ 
-    user, 
-    subscription, 
+
+  setAuth: (user, subscription) => set({
+    user,
+    subscription,
     isAuthenticated: true,
     isInitialLoading: false
   }),
-  
+
   setInitialLoading: (loading) => set({ isInitialLoading: loading }),
-  
-  clearAuth: () => set({ 
-    user: null, 
-    subscription: null, 
+
+  clearAuth: () => set({
+    user: null,
+    subscription: null,
     isAuthenticated: false,
     isInitialLoading: false
   }),
-  
+
   setAuthenticated: (isAuth) => set({ isAuthenticated: isAuth }),
 }));
