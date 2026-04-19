@@ -10,13 +10,7 @@
     "frontendDist": "../dist"
   },
   "app": {
-    "windows": [
-      {
-        "title": "Truncate",
-        "width": 600,
-        "height": 600
-      }
-    ],
+    "windows": [],
     "security": {
       "csp": null,
       "capabilities": [

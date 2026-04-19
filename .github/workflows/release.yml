@@ -9,7 +9,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform: [macos-latest, ubuntu-latest, windows-latest]
+        platform: [macos-latest, ubuntu-latest]
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -55,8 +55,6 @@ jobs:
           name: tauri-artifacts-${{ matrix.platform }}
           path: |
             truncate/src-tauri/target/release/bundle/dmg/*.dmg
-            truncate/src-tauri/target/release/bundle/msi/*.msi
-            truncate/src-tauri/target/release/bundle/nsis/*.exe
             truncate/src-tauri/target/release/bundle/deb/*.deb
             truncate/src-tauri/target/release/bundle/appimage/*.AppImage
             truncate/src-tauri/target/release/bundle/macos/*.app.tar.gz
