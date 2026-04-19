@@ -50,7 +50,6 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          args: --build
           projectPath: truncate
 
       - name: Upload to Public Release Repo
@@ -58,7 +57,7 @@ jobs:
         with:
           token: ${{ secrets.RELEASE_REPO_TOKEN }}
           repository: Truncate-org/truncate-releases
-          tag_name: v__VERSION__
+          tag_name: ${{ github.ref_name }}
           name: "Truncate v__VERSION__"
           body: "Automated release from Truncate IDE source."
           draft: true
