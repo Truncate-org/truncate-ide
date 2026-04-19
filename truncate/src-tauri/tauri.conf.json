@@ -42,14 +42,14 @@
     ],
     "externalBin": [
       "binaries/ollama"
-    ],
-    "plugins": {
-      "updater": {
-        "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEVBQjA5OUI5ODJDMUI5ODcKUldTSHVjR0N1Wm13Nmkrdk9kOEJ6RDVRa0I1Q3NLdDlKeExqb2pMZjl4bkEvTzBuelJFZ3RBRzIK",
-        "endpoints": [
-          "https://github.com/Truncate-org/truncate-releases/releases/latest/download/latest.json"
-        ]
-      }
+    ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEVBQjA5OUI5ODJDMUI5ODcKUldTSHVjR0N1Wm13Nmkrdk9kOEJ6RDVRa0I1Q3NLdDlKeExqb2pMZjl4bkEvTzBuelJFZ3RBRzIK",
+      "endpoints": [
+        "https://github.com/Truncate-org/truncate-releases/releases/latest/download/latest.json"
+      ]
     }
   }
 }
