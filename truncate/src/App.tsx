@@ -5,6 +5,7 @@ import { useAiStore } from "./store/aiStore";
 import EngineSetupScreen from "./components/Modals/EngineSetupScreen";
 import SettingsModal from "./components/Modals/SettingsModal";
 import AuthGate from "./components/auth/AuthGate";
+import { UpdateBanner } from "./components/UI/UpdateBanner";
 
 import ConfirmationModal from "./components/Modals/ConfirmationModal";
 
@@ -36,6 +37,7 @@ function App() {
       <EngineSetupScreen />
       <SettingsModal />
       <ConfirmationModal />
+      <UpdateBanner />
     </AuthGate>
   );
 }
