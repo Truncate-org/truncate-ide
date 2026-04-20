@@ -81,7 +81,7 @@ use tauri_plugin_shell::ShellExt;
 
 #[tauri::command]
 pub async fn launch_ollama(app: tauri::AppHandle) -> Result<(), TruncateError> {
-    let mut proc_guard = OLLAMA_PROCESS.lock().unwrap();
+    let proc_guard = OLLAMA_PROCESS.lock().unwrap();
     if proc_guard.is_some() {
         return Ok(()); // Already running from our perspective
     }
