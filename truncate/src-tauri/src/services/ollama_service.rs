@@ -90,8 +90,8 @@ pub async fn launch_ollama(app: tauri::AppHandle) -> Result<(), TruncateError> {
         Ok(sidecar) => {
             match sidecar.args(["serve"]).spawn() {
                 Ok((_rx, _child)) => {
-                    // Note: We are not storing the sidecar child in OLLAMA_PROCESS 
-                    // because sidecar handles its own lifecycle usually, 
+                    // Note: We are not storing the sidecar child in OLLAMA_PROCESS
+                    // because sidecar handles its own lifecycle usually,
                     // or we'd need a different way to track it.
                     // For now, we just mark it as "attempted".
                     Ok(())
