@@ -36,8 +36,17 @@ fn map_status_message(status: &str) -> String {
     }
 }
 
-// Checks if the target model is installed
-async fn is_model_installed(client: &Client, model_name: &str) -> bool {
+#[tauri::command]
+pub async fn is_engine_installed() -> bool {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(2))
+        .build()
+        .unwrap_or_default();
+
+    is_model_installed(&client, "qwen2.5-coder").await
+}
+
+pub async fn is_model_installed(client: &reqwest::Client, model_name: &str) -> bool {
     #[derive(Deserialize)]
     struct OllamaModel {
         name: String,

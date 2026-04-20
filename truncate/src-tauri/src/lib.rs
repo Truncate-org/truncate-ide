@@ -289,7 +289,6 @@ pub fn run() {
             start_terminal_auto,
             stop_terminal,
             refresh_databases,
-            refresh_databases,
             inspect_csv,
             ai_copilot::ask_copilot,
             ai_copilot::check_ai_status,
@@ -303,7 +302,9 @@ pub fn run() {
             keychain::delete_keychain_token,
             api_proxy::api_proxy,
             subscription::get_subscription_status,
-            setup::initialize_ai
+            setup::initialize_ai,
+            setup::is_engine_installed,
+            ai_copilot::cancel_ai_request
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

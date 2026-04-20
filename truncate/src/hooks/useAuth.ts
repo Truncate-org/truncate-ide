@@ -36,21 +36,41 @@ export function useAuth() {
         return;
       }
 
-      // Aligned with GET /api/license/validate
-      const res = await api.get<any>("/api/license/validate", token);
-      logger.log("License validation response:", res);
+      // Use /api/auth/verify (maps to /api/dashboard) to get full profile + license
+      const res = await api.get<any>("/api/auth/verify", token);
+      logger.log("Session verification response:", res);
 
       if (res.success && res.data) {
-        // Backend returns is_valid and expiry_date
+        // 1. Extract Subscription Info
         const isValidLicense = res.data.valid !== undefined ? res.data.valid : res.data.is_valid;
-        const expiry = res.data.expires_at || res.data.expiry_date;
+        const subData = res.data.subscription || {};
+        const expiry = res.data.expires_at || subData.expires_at || subData.expiry_date;
 
-        if (!isValidLicense) {
-          logger.warn("License no longer valid", res.data);
-          setSubscription({ status: "expired", plan: "pro", expires_at: expiry } as any);
-        } else {
-          setSubscription({ status: "active", plan: "pro", expires_at: expiry } as any);
+        setSubscription({
+          status: isValidLicense ? "active" : "expired",
+          plan: subData.plan || "pro",
+          expires_at: expiry,
+          credits_remaining: subData.credits_remaining ?? 500
+        } as any);
+
+        // 2. Extract and Persist User Profile
+        const userData = res.data.user;
+        if (userData) {
+          setUser(userData);
+          keychain.setUser(userData);
           useAuthStore.getState().setAuthenticated(true);
+        } else {
+          // Fallback: Restore user profile from local persistence if not in API response
+          const persistedUser = keychain.getUser();
+          if (persistedUser) {
+            setUser(persistedUser);
+            useAuthStore.getState().setAuthenticated(true);
+          } else {
+            logger.warn("Verify: License valid but user profile missing from server and local persistence.");
+            // We are authenticated but have no profile info. 
+            // In this case, we'll keep the session but it might look empty.
+            useAuthStore.getState().setAuthenticated(true);
+          }
         }
       } else {
         logger.warn("Verification failed: invalid response", res);
@@ -80,12 +100,15 @@ export function useAuth() {
         await keychain.setToken(token);
       }
 
-      setUser({
+      const userData = {
         id: resUsername, // Use username as ID if not provided
         username: resUsername,
         email: email,
         display_name: resUsername
-      });
+      };
+
+      setUser(userData);
+      keychain.setUser(userData);
 
       setSubscription({
         status: "active",

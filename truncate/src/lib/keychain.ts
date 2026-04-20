@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { logger } from "./logger";
+import { User } from "../store/authStore";
 
 /**
  * Secure OS Keychain operations via Rust backend.
@@ -40,10 +41,29 @@ export const keychain = {
 
   deleteToken: async () => {
     localStorage.removeItem("truncate_ide_token");
+    localStorage.removeItem("truncate_ide_user");
     try {
       await invoke("delete_keychain_token");
     } catch (err) {
       logger.warn("Failed to delete keychain token:", err);
+    }
+  },
+
+  setUser(user: User): void {
+    try {
+      localStorage.setItem("truncate_ide_user", JSON.stringify(user));
+    } catch (e) {
+      logger.error("Failed to save user to localStorage", e);
+    }
+  },
+
+  getUser(): User | null {
+    try {
+      const data = localStorage.getItem("truncate_ide_user");
+      return data ? JSON.parse(data) : null;
+    } catch (e) {
+      logger.error("Failed to parse user from localStorage", e);
+      return null;
     }
   },
 };
