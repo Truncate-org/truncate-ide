@@ -299,9 +299,9 @@ impl DatabaseAdapter for CsvAdapter {
                     .map_err(|e| format!("Failed to begin transaction: {}", e))?;
 
                 let col_count = valid_batch[0].len();
-                // SQLite has a parameter limit (usually 999 or 32766). 
+                // SQLite has a parameter limit (usually 999 or 32766).
                 // We'll use a conservative chunk size to stay well within limits.
-                let max_params = 999; 
+                let max_params = 999;
                 let chunk_size = (max_params / col_count.max(1)).max(1).min(100);
 
                 for chunk in valid_batch.chunks(chunk_size) {

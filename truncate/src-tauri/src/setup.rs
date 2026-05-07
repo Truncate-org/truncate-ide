@@ -140,7 +140,8 @@ pub async fn initialize_ai(app: AppHandle) -> Result<(), String> {
 
     let mut current_percent = 15.0;
     let mut layers_total: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
-    let mut layers_completed: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
+    let mut layers_completed: std::collections::HashMap<String, u64> =
+        std::collections::HashMap::new();
 
     while let Some(item) = stream.next().await {
         let chunk = item.map_err(|e| e.to_string())?;
@@ -162,7 +163,8 @@ pub async fn initialize_ai(app: AppHandle) -> Result<(), String> {
                         let completed_all: u64 = layers_completed.values().sum();
 
                         if total_all > 0 {
-                            current_percent = 15.0 + ((completed_all as f64 / total_all as f64) * 75.0);
+                            current_percent =
+                                15.0 + ((completed_all as f64 / total_all as f64) * 75.0);
                         }
                     } else {
                         if total > 0 {

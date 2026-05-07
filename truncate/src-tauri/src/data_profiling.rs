@@ -63,7 +63,7 @@ pub async fn profile_table(
     for chunk in col_names.chunks(10) {
         let mut stats_selects = Vec::new();
         for col in chunk {
-            // We calculate: 
+            // We calculate:
             // 0: Non-null count
             // 1: Distinct count
             // 2: Min
@@ -77,28 +77,46 @@ pub async fn profile_table(
         }
 
         let batch_query = format!("SELECT {} FROM {q}{table}{q}", stats_selects.join(", "));
-        
+
         if let Ok(QueryResult::ResultSet(rs)) = adapter.execute_query(&batch_query).await {
             if let Some(row) = rs.rows.first() {
                 for (i, col) in chunk.iter().enumerate() {
                     let offset = i * 6;
-                    
-                    let non_null_count: i64 = row.get(offset).and_then(|v| v.parse().ok()).unwrap_or(0);
+
+                    let non_null_count: i64 =
+                        row.get(offset).and_then(|v| v.parse().ok()).unwrap_or(0);
                     let null_count = total_rows - non_null_count;
-                    let null_percentage = if total_rows > 0 { (null_count as f64 / total_rows as f64) * 100.0 } else { 0.0 };
-                    
-                    let distinct_count: i64 = row.get(offset + 1).and_then(|v| v.parse().ok()).unwrap_or(0);
-                    
+                    let null_percentage = if total_rows > 0 {
+                        (null_count as f64 / total_rows as f64) * 100.0
+                    } else {
+                        0.0
+                    };
+
+                    let distinct_count: i64 = row
+                        .get(offset + 1)
+                        .and_then(|v| v.parse().ok())
+                        .unwrap_or(0);
+
                     let min_val = row.get(offset + 2).cloned();
                     let max_val = row.get(offset + 3).cloned();
-                    let avg: f64 = row.get(offset + 4).and_then(|v| v.parse().ok()).unwrap_or(0.0);
-                    let avg_sq: f64 = row.get(offset + 5).and_then(|v| v.parse().ok()).unwrap_or(0.0);
+                    let avg: f64 = row
+                        .get(offset + 4)
+                        .and_then(|v| v.parse().ok())
+                        .unwrap_or(0.0);
+                    let avg_sq: f64 = row
+                        .get(offset + 5)
+                        .and_then(|v| v.parse().ok())
+                        .unwrap_or(0.0);
 
                     let variance = avg_sq - (avg * avg);
                     let std_dev = if variance > 0.0 { variance.sqrt() } else { 0.0 };
-                    
+
                     let mut outliers_count = 0;
-                    let mut inferred_type = if non_null_count > 0 && row.get(offset + 2).is_some() { "NUMERIC".to_string() } else { "TEXT".to_string() };
+                    let mut inferred_type = if non_null_count > 0 && row.get(offset + 2).is_some() {
+                        "NUMERIC".to_string()
+                    } else {
+                        "TEXT".to_string()
+                    };
 
                     // Outlier analysis (requires a second pass per column if numeric)
                     if std_dev > 0.0 {
@@ -106,8 +124,15 @@ pub async fn profile_table(
                              "SELECT COUNT(*) FROM {q}{table}{q} WHERE ABS(CAST({q}{col}{q} as {rt}) - {}) > {}",
                              avg, 3.0 * std_dev, q = q, table = table, col = col, rt = real_type
                          );
-                        if let Ok(QueryResult::ResultSet(ors)) = adapter.execute_query(&outlier_query).await {
-                            outliers_count = ors.rows.first().and_then(|r| r.first()).and_then(|v| v.parse().ok()).unwrap_or(0);
+                        if let Ok(QueryResult::ResultSet(ors)) =
+                            adapter.execute_query(&outlier_query).await
+                        {
+                            outliers_count = ors
+                                .rows
+                                .first()
+                                .and_then(|r| r.first())
+                                .and_then(|v| v.parse().ok())
+                                .unwrap_or(0);
                         }
                     }
 

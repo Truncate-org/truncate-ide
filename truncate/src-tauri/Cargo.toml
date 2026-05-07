@@ -2,7 +2,7 @@
 name = "truncate"
 version = "0.2.6"
 description = "A Tauri App"
-authors = ["you"]
+authors = ["ArpitSarang"]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
