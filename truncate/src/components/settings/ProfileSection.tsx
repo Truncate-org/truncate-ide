@@ -26,7 +26,8 @@ const ProfileSection: React.FC = () => {
 
 
 
-  const getAvatarColor = (id: string) => {
+  const getAvatarColor = (rawId: string | number) => {
+    const id = String(rawId || "unknown");
     let hash = 0;
     for (let i = 0; i < id.length; i++) {
       hash = id.charCodeAt(i) + ((hash << 5) - hash);
@@ -69,30 +70,26 @@ const ProfileSection: React.FC = () => {
           className="w-20 h-20 rounded-2xl flex items-center justify-center text-3xl font-bold text-white shadow-2xl relative group overflow-hidden shrink-0"
           style={{ backgroundColor: getAvatarColor(user.id) }}
         >
-          {user.display_name.charAt(0).toUpperCase()}
+          {String(user.display_name || user.username || "U").charAt(0).toUpperCase()}
           <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity" />
         </div>
 
         <div className="flex flex-col flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <h3 className="text-xl font-bold text-white tracking-tight truncate">
-              {user.display_name}
+              {user.display_name || user.username || "Truncate User"}
             </h3>
             {subscription?.plan !== "free" && (
               <ShieldCheck className="w-4 h-4 text-blue-400 shrink-0" />
             )}
           </div>
           <div className="flex items-center gap-2 text-sm text-secondary font-medium whitespace-nowrap overflow-hidden">
-            <span className="truncate">@{user.username}</span>
+            <span className="truncate">@{user.username || "user"}</span>
             <span className="w-1 h-1 rounded-full bg-white/20 shrink-0" />
             <span className="text-xs opacity-60 font-normal truncate">{user.email}</span>
           </div>
 
-          <div className="mt-3 flex gap-2">
-            <span className="px-2.5 py-0.5 bg-white/5 border border-white/10 rounded-full text-[10px] font-bold uppercase tracking-widest text-[#007acc]">
-              ID: {user.id.slice(0, 8)}
-            </span>
-          </div>
+
         </div>
       </div>
 
@@ -120,9 +117,7 @@ const ProfileSection: React.FC = () => {
               {subscription?.status === "active" ? "Active Subscription" : subscription?.status ?? "No subscription found"}
               </span>
             </div>
-            <span className="text-[11px] text-gray-500 ml-3.5">
-              Valid until {subscription?.expires_at ? new Date(subscription.expires_at).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' }) : "No expiry"}
-            </span>
+
           </div>
         </div>
       </div>

@@ -4,6 +4,8 @@ import { ArrowUp, ArrowDown, Filter, X, Search } from 'lucide-react';
 import { processRows, SortState, FilterState, ColumnType } from '../../utils/dataProcessing';
 import clsx from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { Grid } from 'react-window';
+import { AutoSizer } from 'react-virtualized-auto-sizer';
 
 interface ResultSetTableProps {
     data: TablePreview;
@@ -28,7 +30,7 @@ const OPERATORS = {
         { value: 'between', label: 'Between' },
     ],
     boolean: [
-        { value: 'eq', label: 'Is' } // Simplification for bool
+        { value: 'eq', label: 'Is' }
     ]
 };
 
@@ -45,7 +47,6 @@ const ResultSetTable: React.FC<ResultSetTableProps> = ({ data }) => {
         setActiveFilterCol(null);
     }, [data.rows]);
 
-    // Map backend types to frontend simplified types for filtering/sorting
     const columnTypes: ColumnType[] = useMemo(() => {
         return data.columns.map(col => {
             const t = col.type_name.toLowerCase();
@@ -96,18 +97,51 @@ const ResultSetTable: React.FC<ResultSetTableProps> = ({ data }) => {
         setActiveFilterCol(null);
     };
 
-    // Helper to get alignment class
     const getAlignClass = (idx: number) => {
         const type = columnTypes[idx];
         if (type === 'number') return 'text-right justify-end';
-        // if (type === 'boolean') return 'text-center justify-center'; // Center bools? Maybe keep left for now.
         return 'text-left justify-start';
     };
 
+    // Virtualized Cell Renderer
+    const Cell = ({ columnIndex, rowIndex, style }: any) => {
+        // First column is the row index (#)
+        if (columnIndex === 0) {
+            return (
+                <div 
+                    style={style}
+                    className="flex items-center justify-center px-2 border-b border-r border-[#363636] text-[10px] text-gray-600 select-none bg-[#252526]/50 font-mono"
+                >
+                    {rowIndex + 1}
+                </div>
+            );
+        }
+
+        const dataColumnIndex = columnIndex - 1;
+        const cellValue = visibleRows[rowIndex][dataColumnIndex];
+        const type = columnTypes[dataColumnIndex];
+        const alignClass = type === 'number' ? 'text-right' : 'text-left';
+        const isNull = cellValue === 'NULL';
+
+        return (
+            <div
+                style={style}
+                className={twMerge(
+                    "flex items-center px-4 border-b border-r border-[#363636] whitespace-nowrap overflow-hidden text-ellipsis text-sm text-primary font-mono bg-[#1e1e1e]",
+                    alignClass,
+                    isNull && "text-gray-500 italic text-[11px]"
+                )}
+                title={String(cellValue)}
+            >
+                {isNull ? 'NULL' : cellValue}
+            </div>
+        );
+    };
+
     return (
-        <div className="flex flex-col h-full bg-editor-bg font-sans">
+        <div className="flex flex-col h-full bg-editor-bg font-sans overflow-hidden">
             {/* Toolbar */}
-            <div className="flex items-center justify-between p-2 border-b border-subtle bg-surface-secondary/50">
+            <div className="flex items-center justify-between p-2 border-b border-subtle bg-surface-secondary/50 shrink-0">
                 <div className="flex items-center flex-1 max-w-sm relative group">
                     <Search className="w-4 h-4 absolute left-3 text-secondary group-focus-within:text-blue-400 transition-colors" />
                     <input
@@ -143,132 +177,102 @@ const ResultSetTable: React.FC<ResultSetTableProps> = ({ data }) => {
                 </div>
             </div>
 
-            {/* Table Area */}
-            <div className="flex-1 overflow-auto relative scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
-                {visibleRows.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center pt-24 text-secondary opacity-60">
-                        <div className="bg-white/5 p-4 rounded-full mb-3">
-                            <Filter className="w-8 h-8" />
-                        </div>
-                        <p className="font-medium">No rows match the current filters</p>
-                        <button
-                            onClick={() => { setFilterState({}); setGlobalSearch(''); }}
-                            className="mt-3 text-blue-400 hover:text-blue-300 hover:underline text-sm transition-colors"
-                        >
-                            Clear all filters
-                        </button>
+            {/* Header Area (Sticky) */}
+            <div className="overflow-x-auto scrollbar-none flex-1 flex flex-col" id="grid-container">
+                <div className="flex bg-[#252526] sticky top-0 z-20 shadow-md border-b border-[#3e3e3e] shrink-0" style={{ width: (data.columns.length + 1) * 150 }}>
+                    <div className="w-10 min-w-[40px] border-r border-[#3e3e3e] bg-[#2d2d2d] flex items-center justify-center text-[10px] text-gray-500 font-mono select-none">
+                        #
                     </div>
-                ) : (
-                    <table className="w-full text-left border-collapse">
-                        <thead className="bg-[#252526] sticky top-0 z-20 shadow-lg after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[1px] after:bg-[#3e3e3e]">
-                            <tr>
-                                <th className="sticky left-0 z-30 w-10 min-w-[40px] border-b border-r border-[#3e3e3e] bg-[#2d2d2d] text-center text-[10px] text-gray-500 font-mono select-none">
-                                    #
-                                </th>
-                                {data.columns.map((col, idx) => {
-                                    const isSorted = sortState?.columnIndex === idx;
-                                    const isFiltered = !!filterState[idx];
-                                    const type = columnTypes[idx];
-                                    const alignClass = getAlignClass(idx);
+                    {data.columns.map((col, idx) => {
+                        const isSorted = sortState?.columnIndex === idx;
+                        const isFiltered = !!filterState[idx];
+                        const type = columnTypes[idx];
+                        const alignClass = getAlignClass(idx);
 
-                                    return (
-                                        <th key={idx} className="group relative border-b border-r border-[#3e3e3e] min-w-[150px] max-w-[400px]">
-                                            <div
-                                                className={twMerge(
-                                                    "flex items-center px-3 py-2 text-xs font-semibold text-secondary cursor-pointer hover:bg-[#2a2d2e] select-none h-full transition-colors",
-                                                    isSorted && "bg-[#2a2d2e] text-primary",
-                                                    alignClass // Align header content same as body? Usually headers logic left, numbers right
-                                                )}
-                                                onClick={() => handleHeaderClick(idx)}
-                                            >
-                                                {/* Column Name & Type Badge */}
-                                                <div className="flex flex-col min-w-0 mr-2">
-                                                    <div className="flex items-center space-x-1.5">
-                                                        {/* Type Icon/Badge */}
-                                                        <span className={clsx(
-                                                            "text-[9px] uppercase tracking-tighter font-bold px-1 rounded",
-                                                            type === 'number' ? "text-emerald-400 bg-emerald-400/10" :
-                                                                type === 'string' ? "text-blue-400 bg-blue-400/10" :
-                                                                    type === 'date' ? "text-purple-400 bg-purple-400/10" :
-                                                                        type === 'boolean' ? "text-orange-400 bg-orange-400/10" :
-                                                                            "text-gray-400 bg-gray-400/10"
-                                                        )}>
-                                                            {type.substr(0, 3)}
-                                                        </span>
-                                                        <span className="truncate" title={`${col.name} (${col.type_name})`}>{col.name}</span>
-                                                    </div>
-                                                </div>
+                        return (
+                            <div key={idx} className="group relative border-r border-[#3e3e3e] w-[150px] shrink-0 h-10">
+                                <div
+                                    className={twMerge(
+                                        "flex items-center px-3 py-2 h-full text-xs font-semibold text-secondary cursor-pointer hover:bg-[#2a2d2e] select-none transition-colors",
+                                        isSorted && "bg-[#2a2d2e] text-primary",
+                                        alignClass
+                                    )}
+                                    onClick={() => handleHeaderClick(idx)}
+                                >
+                                    <div className="flex flex-col min-w-0 mr-2">
+                                        <div className="flex items-center space-x-1.5">
+                                            <span className={clsx(
+                                                "text-[9px] uppercase tracking-tighter font-bold px-1 rounded",
+                                                type === 'number' ? "text-emerald-400 bg-emerald-400/10" :
+                                                    type === 'string' ? "text-blue-400 bg-blue-400/10" :
+                                                        type === 'date' ? "text-purple-400 bg-purple-400/10" :
+                                                            type === 'boolean' ? "text-orange-400 bg-orange-400/10" :
+                                                                "text-gray-400 bg-gray-400/10"
+                                            )}>
+                                                {type.substr(0, 3)}
+                                            </span>
+                                            <span className="truncate" title={`${col.name} (${col.type_name})`}>{col.name}</span>
+                                        </div>
+                                    </div>
 
-                                                <div className="flex items-center space-x-1 shrink-0 ml-auto">
-                                                    {isSorted && (
-                                                        sortState.direction === 'asc'
-                                                            ? <ArrowUp className="w-3 h-3 text-blue-400 animate-in slide-in-from-bottom-1" />
-                                                            : <ArrowDown className="w-3 h-3 text-blue-400 animate-in slide-in-from-top-1" />
-                                                    )}
+                                    <div className="flex items-center space-x-1 shrink-0 ml-auto">
+                                        {isSorted && (
+                                            sortState.direction === 'asc'
+                                                ? <ArrowUp className="w-3 h-3 text-blue-400 animate-in slide-in-from-bottom-1" />
+                                                : <ArrowDown className="w-3 h-3 text-blue-400 animate-in slide-in-from-top-1" />
+                                        )}
 
-                                                    <div
-                                                        className={twMerge(
-                                                            "p-1 rounded hover:bg-white/10 transition-colors opacity-0 group-hover:opacity-100",
-                                                            (isFiltered || activeFilterCol === idx) && "opacity-100",
-                                                            activeFilterCol === idx && "bg-white/10 text-white"
-                                                        )}
-                                                        onClick={(e) => toggleFilterMenu(e, idx)}
-                                                    >
-                                                        <Filter className={clsx("w-3 h-3", isFiltered && "fill-blue-400 text-blue-400")} />
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            {activeFilterCol === idx && (
-                                                <FilterDropdown
-                                                    colIdx={idx}
-                                                    type={type}
-                                                    currentFilter={filterState[idx]?.[0]}
-                                                    onApply={updateFilter}
-                                                    onClear={() => clearFilter(idx)}
-                                                    onClose={() => setActiveFilterCol(null)}
-                                                    alignment={idx < data.columns.length / 2 ? 'left' : 'right'}
-                                                />
+                                        <div
+                                            className={twMerge(
+                                                "p-1 rounded hover:bg-white/10 transition-colors opacity-0 group-hover:opacity-100",
+                                                (isFiltered || activeFilterCol === idx) && "opacity-100",
+                                                activeFilterCol === idx && "bg-white/10 text-white"
                                             )}
-                                        </th>
-                                    );
-                                })}
-                            </tr>
-                        </thead>
-                        <tbody className="text-sm text-primary font-mono bg-[#1e1e1e]">
-                            {visibleRows.map((row, rowIdx) => (
-                                <tr key={rowIdx} className="hover:bg-[#2a2d2e] transition-colors group even:bg-[#1e1e1e] odd:bg-[#212121]">
-                                    <td className="px-2 py-1.5 border-b border-r border-[#363636] text-[10px] text-gray-600 text-center select-none bg-[#252526]/50">
-                                        {rowIdx + 1}
-                                    </td>
-                                    {row.map((cell, cellIdx) => {
-                                        const type = columnTypes[cellIdx];
-                                        const alignClass = type === 'number' ? 'text-right' : 'text-left';
+                                            onClick={(e) => toggleFilterMenu(e, idx)}
+                                        >
+                                            <Filter className={clsx("w-3 h-3", isFiltered && "fill-blue-400 text-blue-400")} />
+                                        </div>
+                                    </div>
+                                </div>
 
-                                        // Formatting for NULL
-                                        const isNull = cell === 'NULL';
+                                {activeFilterCol === idx && (
+                                    <FilterDropdown
+                                        colIdx={idx}
+                                        type={type}
+                                        currentFilter={filterState[idx]?.[0]}
+                                        onApply={updateFilter}
+                                        onClear={() => clearFilter(idx)}
+                                        onClose={() => setActiveFilterCol(null)}
+                                        alignment={idx < data.columns.length / 2 ? 'left' : 'right'}
+                                    />
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
 
-                                        return (
-                                            <td
-                                                key={cellIdx}
-                                                className={twMerge(
-                                                    "px-4 py-1.5 border-b border-r border-[#363636] whitespace-nowrap overflow-hidden text-ellipsis max-w-[300px]",
-                                                    alignClass,
-                                                    isNull && "text-gray-500 italic text-[11px]"
-                                                )}
-                                                title={String(cell)}
-                                            >
-                                                {isNull ? 'NULL' : cell}
-                                            </td>
-                                        );
-                                    })}
-                                </tr>
-                            ))}
-                            {/* Empty space filler if needed, or simply let it be */}
-                        </tbody>
-                    </table>
-                )}
+                {/* Grid Area */}
+                <div className="flex-1 min-h-0 bg-[#1e1e1e]">
+                    <AutoSizer
+                        renderProp={({ height, width }) => {
+                            if (height === undefined || width === undefined) return null;
+                            return (
+                                <Grid
+                                    columnCount={data.columns.length + 1}
+                                    columnWidth={150}
+                                    rowCount={visibleRows.length}
+                                    rowHeight={32}
+                                    style={{ height, width }}
+                                    className="scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent"
+                                    cellComponent={Cell}
+                                    cellProps={{ visibleRows, columnTypes }}
+                                />
+                            );
+                        }}
+                    />
+                </div>
             </div>
+
             {activeFilterCol !== null && (
                 <div className="fixed inset-0 z-10" onClick={() => setActiveFilterCol(null)} />
             )}
@@ -288,12 +292,10 @@ interface FilterDropdownProps {
 }
 
 const FilterDropdown: React.FC<FilterDropdownProps> = ({ colIdx, type, currentFilter, onApply, onClear, onClose, alignment }) => {
-    // Local state for the form
     const [operator, setOperator] = useState(currentFilter?.operator || OPERATORS[type][0].value);
     const [value, setValue] = useState(currentFilter?.value || '');
     const [value2, setValue2] = useState(currentFilter?.value2 || '');
 
-    // Reset when type changes
     useEffect(() => {
         if (!currentFilter) {
             setOperator(OPERATORS[type][0].value);
@@ -308,13 +310,6 @@ const FilterDropdown: React.FC<FilterDropdownProps> = ({ colIdx, type, currentFi
         onClose();
     };
 
-    // Determine horizontal alignment based on column index
-    // If it's in the first half of columns, align left. Otherwise align right.
-    // We need to pass totalColumns to this component or calculate it.
-    // But wait, the parent knows. Let's make the parent pass "alignment" or we just infer from colIdx if we had total.
-    // Actually, simply checking if colIdx < 3 (arbitrary) or just passing an alignment prop is cleaner.
-    // Let's modify the props of FilterDropdown to accept `align: 'left' | 'right'`.
-
     return (
         <div
             className={twMerge(
@@ -323,7 +318,6 @@ const FilterDropdown: React.FC<FilterDropdownProps> = ({ colIdx, type, currentFi
             )}
             onClick={(e) => e.stopPropagation()}
         >
-            {/* Header */}
             <div className="flex items-center justify-between px-3 py-2 bg-[#252526] border-b border-[#3e3e3e]">
                 <span className="text-xs font-semibold text-gray-300">Filter by condition</span>
                 <button
@@ -334,10 +328,7 @@ const FilterDropdown: React.FC<FilterDropdownProps> = ({ colIdx, type, currentFi
                 </button>
             </div>
 
-            {/* Content */}
             <form onSubmit={handleSubmit} className="p-3 flex flex-col gap-3">
-
-                {/* Operator Select */}
                 <div className="flex flex-col gap-1">
                     <label className="text-[10px] uppercase font-bold text-gray-500 tracking-wider ml-0.5">Condition</label>
                     <div className="relative">
@@ -350,14 +341,12 @@ const FilterDropdown: React.FC<FilterDropdownProps> = ({ colIdx, type, currentFi
                                 <option key={op.value} value={op.value}>{op.label}</option>
                             ))}
                         </select>
-                        {/* Custom Arrow for select */}
                         <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-400">
                             <svg className="fill-current h-3 w-3" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" /></svg>
                         </div>
                     </div>
                 </div>
 
-                {/* Value Input */}
                 <div className="flex flex-col gap-1">
                     <label className="text-[10px] uppercase font-bold text-gray-500 tracking-wider ml-0.5">Value</label>
                     <input
@@ -370,7 +359,6 @@ const FilterDropdown: React.FC<FilterDropdownProps> = ({ colIdx, type, currentFi
                     />
                 </div>
 
-                {/* Second Value (Between) */}
                 {(operator === 'between') && (
                     <div className="flex flex-col gap-1 animate-in slide-in-from-top-1 duration-200">
                         <label className="text-[10px] uppercase font-bold text-gray-500 tracking-wider ml-0.5">End Value</label>
@@ -384,7 +372,6 @@ const FilterDropdown: React.FC<FilterDropdownProps> = ({ colIdx, type, currentFi
                     </div>
                 )}
 
-                {/* Actions */}
                 <div className="flex justify-between items-center mt-2 pt-3 border-t border-[#3e3e3e]">
                     <button
                         type="button"

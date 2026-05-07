@@ -138,6 +138,10 @@ pub async fn initialize_ai(app: AppHandle) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
     let mut stream = res.bytes_stream();
 
+    let mut current_percent = 15.0;
+    let mut layers_total: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
+    let mut layers_completed: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
+
     while let Some(item) = stream.next().await {
         let chunk = item.map_err(|e| e.to_string())?;
         let text = String::from_utf8_lossy(&chunk);
@@ -148,22 +152,32 @@ pub async fn initialize_ai(app: AppHandle) -> Result<(), String> {
             }
             if let Ok(progress) = serde_json::from_str::<PullProgress>(line) {
                 let friendly_message = map_status_message(&progress.status);
-                let mut percent = 15.0; // Base percent just for being in the pulling phase
 
                 if let (Some(total), Some(completed)) = (progress.total, progress.completed) {
-                    if total > 0 {
-                        // Rescale download from 15% to 90%
-                        percent = 15.0 + ((completed as f64 / total as f64) * 75.0);
+                    if let Some(digest) = &progress.digest {
+                        layers_total.insert(digest.clone(), total);
+                        layers_completed.insert(digest.clone(), completed);
+
+                        let total_all: u64 = layers_total.values().sum();
+                        let completed_all: u64 = layers_completed.values().sum();
+
+                        if total_all > 0 {
+                            current_percent = 15.0 + ((completed_all as f64 / total_all as f64) * 75.0);
+                        }
+                    } else {
+                        if total > 0 {
+                            current_percent = 15.0 + ((completed as f64 / total as f64) * 75.0);
+                        }
                     }
                 } else if progress.status.to_lowercase().contains("success") {
-                    percent = 100.0;
+                    current_percent = 100.0;
                 }
 
                 let _ = app.emit(
                     "setup-progress",
                     SetupProgressEvent {
                         message: friendly_message,
-                        percent,
+                        percent: current_percent,
                     },
                 );
             }

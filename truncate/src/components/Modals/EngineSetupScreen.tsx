@@ -36,15 +36,18 @@ const EngineSetupScreen: React.FC = () => {
         }
     }, [showSetup, isSyncing, isInstalled]);
 
-    const handleInitialize = () => {
+    const handleInitialize = async () => {
         setLogs(["[SYSTEM] Initializing core synchronization..."]);
         setIsSyncing(true);
-        listen<{message: string, percent: number}>('setup-progress', (event) => {
+        const unlisten = await listen<{message: string, percent: number}>('setup-progress', (event) => {
             setProgress(event.payload);
         });
-        invoke('initialize_ai').catch(err => {
+        invoke('initialize_ai').then(() => {
+            unlisten();
+        }).catch(err => {
             setLogs(prev => [...prev, `[ERROR] ${err}`]);
             setIsSyncing(false);
+            unlisten();
         });
     };
 

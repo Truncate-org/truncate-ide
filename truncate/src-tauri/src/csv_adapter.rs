@@ -293,48 +293,44 @@ impl DatabaseAdapter for CsvAdapter {
         while let Some((valid_batch, bad_batch)) = rx.recv().await {
             // Insert Valid
             if !valid_batch.is_empty() {
-                // Bulk insert is tricky with sqlx and variable args.
-                // We'll use a transaction and individual inserts (loop) for simplicity,
-                // or build a large VALUES (), (), () string.
-                // Large VALUES string is faster.
-
-                // let mut query_builder = format!("INSERT INTO {} VALUES ", table_name);
-                // let mut params_count = 0;
-                // let batch_size = valid_batch.len();
-
-                // Construct query: (?, ?, ?), (?, ?, ?) ...
-                // Actually, string construction is unsafe if we don't bind parameters.
-                // But binding thousands of params is also tricky.
-                // SQLite has limit on vars (999 or 32766).
-                // Safest to just loop with transaction?
-                // Or "Insert into ... select ... union all select ... "
-                // Let's use transaction + individual commands prepared? Or chunks of 50.
-
-                // For simplicity and safety (handling quotes etc), parametrized query is best.
-                // But batch insert in sqlx for SQLite isn't super straightforward without query builder.
-                // Let's start transaction.
-
                 let mut tx = pool
                     .begin()
                     .await
                     .map_err(|e| format!("Failed to begin transaction: {}", e))?;
 
-                for row in valid_batch {
-                    let mut insert_sql = format!("INSERT INTO {} VALUES (", table_name);
-                    for _ in 0..row.len() {
-                        insert_sql.push_str("?,");
-                    }
-                    insert_sql.pop(); // remove last comma
-                    insert_sql.push(')');
+                let col_count = valid_batch[0].len();
+                // SQLite has a parameter limit (usually 999 or 32766). 
+                // We'll use a conservative chunk size to stay well within limits.
+                let max_params = 999; 
+                let chunk_size = (max_params / col_count.max(1)).max(1).min(100);
 
+                for chunk in valid_batch.chunks(chunk_size) {
+                    let mut placeholders = String::new();
+                    for i in 0..chunk.len() {
+                        placeholders.push('(');
+                        for j in 0..col_count {
+                            placeholders.push('?');
+                            if j < col_count - 1 {
+                                placeholders.push(',');
+                            }
+                        }
+                        placeholders.push(')');
+                        if i < chunk.len() - 1 {
+                            placeholders.push(',');
+                        }
+                    }
+
+                    let insert_sql = format!("INSERT INTO {} VALUES {}", table_name, placeholders);
                     let mut query = sqlx::query(&insert_sql);
-                    for val in row {
-                        query = query.bind(val);
+                    for row in chunk {
+                        for val in row {
+                            query = query.bind(val);
+                        }
                     }
                     query
                         .execute(&mut *tx)
                         .await
-                        .map_err(|e| format!("Insert failed: {}", e))?;
+                        .map_err(|e| format!("Bulk insert failed: {}", e))?;
                 }
 
                 tx.commit()

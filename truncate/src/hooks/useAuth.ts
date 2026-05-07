@@ -46,8 +46,22 @@ export function useAuth() {
         const subData = res.data.subscription || {};
         const expiry = res.data.expires_at || subData.expires_at || subData.expiry_date;
 
+        let derivedStatus = "expired";
+        if (isValidLicense === true) {
+          derivedStatus = "active";
+        } else if (isValidLicense === false) {
+          derivedStatus = "expired";
+        } else if (subData.status === "active" || subData.status === "trialing" || subData.status === "ongoing") {
+          derivedStatus = "active";
+        } else if (subData.credits_remaining !== undefined && subData.credits_remaining > 0) {
+          derivedStatus = "active";
+        } else if (!subData.status && res.success) {
+          // If the backend doesn't explicitly tell us but the request succeeded, assume active
+          derivedStatus = "active";
+        }
+
         setSubscription({
-          status: isValidLicense ? "active" : "expired",
+          status: derivedStatus,
           plan: subData.plan || "pro",
           expires_at: expiry,
           credits_remaining: subData.credits_remaining ?? 500
