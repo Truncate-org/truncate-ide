@@ -112,7 +112,7 @@ pub async fn profile_table(
                     let std_dev = if variance > 0.0 { variance.sqrt() } else { 0.0 };
 
                     let mut outliers_count = 0;
-                    let mut inferred_type = if non_null_count > 0 && row.get(offset + 2).is_some() {
+                    let inferred_type = if non_null_count > 0 && row.get(offset + 2).is_some() {
                         "NUMERIC".to_string()
                     } else {
                         "TEXT".to_string()
