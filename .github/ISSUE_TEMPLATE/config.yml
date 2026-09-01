@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions & Discussions
+    url: https://github.com/Truncate-org/truncate-ide/discussions
+    about: Ask usage questions, get help, or discuss ideas before filing an issue.
+  - name: Support & Troubleshooting
+    url: https://github.com/Truncate-org/truncate-ide/blob/main/SUPPORT.md
+    about: Common setup, connection, query, and AI Copilot problems and their fixes.
+  - name: Report a Security Vulnerability
+    url: https://github.com/Truncate-org/truncate-ide/blob/main/SECURITY.md
+    about: Do not open a public issue for security problems — follow this policy instead.

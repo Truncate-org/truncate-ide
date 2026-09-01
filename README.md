@@ -86,7 +86,9 @@
 
 ## Contributing
 
-Contributions are welcome! Please read our [CONTRIBUTING.md](CONTRIBUTING.md) (coming soon) for details on our code of conduct, and the process for submitting pull requests.
+Contributions are welcome! Please read our [CONTRIBUTING.md](CONTRIBUTING.md) for details on our development workflow, coding standards, and how to submit pull requests.
+
+Please review our [Code of Conduct](CODE_OF_CONDUCT.md) and [Security Policy](SECURITY.md) before participating. Need help? Check [SUPPORT.md](SUPPORT.md).
 
 ## License
 
