@@ -9,6 +9,7 @@ pub mod api_proxy;
 pub mod csv_adapter;
 pub mod data_profiling;
 pub mod db_state;
+pub mod device_auth;
 pub mod error;
 pub mod keychain;
 pub mod mysql_adapter;
@@ -301,6 +302,9 @@ pub fn run() {
             keychain::get_keychain_token,
             keychain::delete_keychain_token,
             api_proxy::api_proxy,
+            device_auth::start_device_login,
+            device_auth::poll_device_token,
+            device_auth::refresh_device_token,
             subscription::get_subscription_status,
             setup::initialize_ai,
             setup::is_engine_installed,

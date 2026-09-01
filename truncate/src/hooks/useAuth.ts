@@ -1,7 +1,24 @@
+import { invoke } from "@tauri-apps/api/core";
 import { api } from "../lib/api";
 import { keychain } from "../lib/keychain";
 import { useAuthStore } from "../store/authStore";
 import { logger } from "../lib/logger";
+
+export interface DeviceAuthResponse {
+  device_code: string;
+  user_code: string;
+  verification_uri: string;
+  verification_uri_complete: string;
+  expires_in: number;
+  interval: number;
+}
+
+interface TokenResponse {
+  access_token: string;
+  refresh_token?: string | null;
+  id_token?: string | null;
+  expires_in: number;
+}
 
 export function useAuth() {
   const {
@@ -37,7 +54,7 @@ export function useAuth() {
       }
 
       // Use /api/auth/verify (maps to /api/dashboard) to get full profile + license
-      const res = await api.get<any>("/api/auth/verify", token);
+      const res = await api.get<any>("/api/auth/verify", token.accessToken);
       logger.log("Session verification response:", res);
 
       if (res.success && res.data) {
@@ -103,34 +120,58 @@ export function useAuth() {
     }
   };
 
-  const login = async (username: string, secret_key: string) => {
-    // Aligned with POST /auth/ide/login
-    const res = await api.post<any>("/auth/ide/login", { username, secret_key });
-    logger.log("IDE Login successful:", res);
+  /**
+   * Starts an OAuth 2.0 Device Authorization Grant (RFC 8628) against
+   * Zitadel — returns the code/URL for the caller (LoginScreen) to display
+   * and open in the user's browser.
+   */
+  const startDeviceLogin = async () => {
+    return await invoke<DeviceAuthResponse>("start_device_login");
+  };
 
-    if (res.success && res.data) {
-      const { token, email, username: resUsername, expires_at } = res.data;
-      if (token) {
-        await keychain.setToken(token);
-      }
+  /**
+   * Polls Zitadel's token endpoint until the user completes login in the
+   * browser, then exchanges the resulting Zitadel access token with the Go
+   * backend (resolving/creating the internal User row and registering the
+   * session) before persisting the token bundle.
+   */
+  const completeDeviceLogin = async (deviceCode: string, interval: number, expiresIn: number) => {
+    const tokenRes = await invoke<TokenResponse>("poll_device_token", {
+      deviceCode,
+      interval,
+      expiresIn,
+    });
 
-      const userData = {
-        id: resUsername, // Use username as ID if not provided
-        username: resUsername,
-        email: email,
-        display_name: resUsername
-      };
+    const exchangeRes = await api.post<any>(
+      "/auth/zitadel/exchange",
+      { client: "ide" },
+      tokenRes.access_token
+    );
+    logger.log("Zitadel session exchange response:", exchangeRes);
 
-      setUser(userData);
-      keychain.setUser(userData);
-
-      setSubscription({
-        status: "active",
-        plan: "pro",
-        credits_remaining: 500, // Mocked for now as not in API
-        expires_at: expires_at
-      } as any);
+    if (!exchangeRes.success || !exchangeRes.data) {
+      throw new Error(exchangeRes.message || "Sign-in failed");
     }
+
+    await keychain.setToken({
+      accessToken: tokenRes.access_token,
+      refreshToken: tokenRes.refresh_token,
+      expiresAt: Date.now() + tokenRes.expires_in * 1000,
+    });
+
+    const userData = exchangeRes.data.user;
+    setUser(userData);
+    keychain.setUser(userData);
+
+    const sub = exchangeRes.data.subscription;
+    setSubscription({
+      status: sub?.is_active ? "active" : "expired",
+      plan: "pro",
+      credits_remaining: 500, // Not tracked by the Subscription model — same placeholder verify() already falls back to.
+      expires_at: sub?.end_date ?? null,
+    } as any);
+
+    useAuthStore.getState().setAuthenticated(true);
   };
 
   const logout = async () => {
@@ -141,21 +182,22 @@ export function useAuth() {
 
   const refresh = async () => {
     const token = await keychain.getToken();
-    if (!token) return;
+    if (!token?.refreshToken) return;
 
     try {
-      // Aligned with GET /api/ide/access
-      const res = await api.get<any>("/api/ide/access", token);
-      logger.log("Refresh response:", res);
-      if (res.success && res.data && res.data.token) {
-        await keychain.setToken(res.data.token);
-        // After refresh, we might want to re-validate license
-        // or just update local state if the response included user data
-      }
+      const tokenRes = await invoke<TokenResponse>("refresh_device_token", {
+        refreshToken: token.refreshToken,
+      });
+      logger.log("Refresh response:", tokenRes);
+      await keychain.setToken({
+        accessToken: tokenRes.access_token,
+        refreshToken: tokenRes.refresh_token ?? token.refreshToken,
+        expiresAt: Date.now() + tokenRes.expires_in * 1000,
+      });
     } catch (error) {
       logger.error("Failed to refresh session:", error);
     }
   };
 
-  return { verify, login, logout, refresh };
+  return { verify, startDeviceLogin, completeDeviceLogin, logout, refresh };
 }

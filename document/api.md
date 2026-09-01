@@ -4,7 +4,7 @@
 
 This documentation specifies the API endpoints required for the **Truncate IDE** desktop application to authenticate and validate user licenses.
 
-**Base URL**: `https://truncate-demo-portal.onrender.com`  
+**Base URL**: `https://https://truncate-demo-portal.onrender.com`  
 **Authentication**: Bearer Token (JWT) required for protected endpoints. Obtain this via the `/auth/ide/login` handshake.
 
 ---

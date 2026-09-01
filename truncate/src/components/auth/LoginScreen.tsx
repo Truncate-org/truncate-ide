@@ -1,48 +1,52 @@
 import React, { useState } from "react";
-import { useAuth } from "../../hooks/useAuth";
+import { useAuth, DeviceAuthResponse } from "../../hooks/useAuth";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { Loader2, ExternalLink, Eye, EyeOff } from "lucide-react";
+import { Loader2, ExternalLink, CheckCircle2 } from "lucide-react";
 import clsx from "clsx";
 
 import logo from "../../assets/logo.png";
 
+type Phase = "idle" | "starting" | "waiting" | "error";
+
 const LoginScreen: React.FC = () => {
-  const { login } = useAuth();
-  const [username, setUsername] = useState("");
-  const [secretKey, setSecretKey] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const { startDeviceLogin, completeDeviceLogin } = useAuth();
+  const [phase, setPhase] = useState<Phase>("idle");
+  const [deviceAuth, setDeviceAuth] = useState<DeviceAuthResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [showSecret, setShowSecret] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!username || !secretKey) {
-      setError("Please enter both username and secret key.");
-      return;
-    }
-
-    setIsLoading(true);
+  const handleSignIn = async () => {
     setError(null);
+    setPhase("starting");
 
     try {
-      await login(username, secretKey);
+      const auth = await startDeviceLogin();
+      setDeviceAuth(auth);
+      setPhase("waiting");
+      openUrl(auth.verification_uri_complete);
+
+      await completeDeviceLogin(auth.device_code, auth.interval, auth.expires_in);
+      // AuthGate re-renders once isAuthenticated flips — nothing else to do here.
     } catch (err: any) {
-      if (err.status === 401) {
-        setError("Invalid username or secret key");
-      } else if (err.status === 403) {
-        setError("Access denied. Please check your subscription.");
-      } else if (err.status === 429) {
+      // Rust command failures (Result<T, String>) reject with a plain string,
+      // not an Error — only api.post()'s ApiError has .status/.message.
+      if (err?.status === 429) {
         setError("Too many attempts. Please wait a few minutes.");
+      } else if (typeof err === "string") {
+        setError(err);
       } else {
-        setError(err.message || "Cannot reach Truncate servers. Check your connection.");
+        setError(err?.message || "Sign-in failed. Please try again.");
       }
-    } finally {
-      setIsLoading(false);
+      setPhase("error");
+      setDeviceAuth(null);
     }
   };
 
   const handleOpenSite = () => {
     openUrl("https://account.truncateide.app");
+  };
+
+  const handleReopenBrowser = () => {
+    if (deviceAuth) openUrl(deviceAuth.verification_uri_complete);
   };
 
   return (
@@ -56,49 +60,40 @@ const LoginScreen: React.FC = () => {
           <h1 className="text-2xl font-bold tracking-tight text-white uppercase italic">Truncate</h1>
         </div>
 
-        <form onSubmit={handleSubmit} className="w-full flex flex-col gap-4">
-          {/* Username */}
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-medium text-gray-400 ml-1">Portal Username</label>
-            <input
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              disabled={isLoading}
-              className="w-full bg-[#2d2d2d] border border-[#3e3e3e] rounded-md px-3 py-2 text-sm text-white focus:outline-none focus:border-[#007acc] focus:ring-1 focus:ring-[#007acc] transition-all disabled:opacity-50"
-              placeholder="Username"
-              autoComplete="username"
-            />
-          </div>
-
-          {/* Secret Key */}
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-medium text-gray-400 ml-1">Secret Key (Passkey)</label>
-            <div className="relative group/pass">
-              <input
-                type={showSecret ? "text" : "password"}
-                value={secretKey}
-                onChange={(e) => setSecretKey(e.target.value)}
-                disabled={isLoading}
-                className="w-full bg-[#2d2d2d] border border-[#3e3e3e] rounded-md pl-3 pr-10 py-2 text-sm text-white focus:outline-none focus:border-[#007acc] focus:ring-1 focus:ring-[#007acc] transition-all disabled:opacity-50"
-                placeholder="Enter secret key"
-                autoComplete="current-password"
-              />
+        <div className="w-full flex flex-col gap-4">
+          {phase === "waiting" && deviceAuth ? (
+            <div className="w-full flex flex-col items-center gap-4 text-center">
+              <p className="text-xs text-gray-400">Confirm this code in the browser window we just opened:</p>
+              <div className="w-full bg-[#2d2d2d] border border-[#3e3e3e] rounded-md py-3 px-4">
+                <span className="text-2xl font-bold tracking-[0.2em] text-white">{deviceAuth.user_code}</span>
+              </div>
+              <div className="flex items-center gap-2 text-xs text-gray-400">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                Waiting for confirmation...
+              </div>
               <button
                 type="button"
-                onClick={() => setShowSecret(!showSecret)}
-                disabled={isLoading}
-                className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-gray-500 hover:text-gray-300 transition-colors disabled:opacity-50"
-                title={showSecret ? "Hide key" : "Show key"}
+                onClick={handleReopenBrowser}
+                className="group flex items-center gap-1.5 text-[11px] text-gray-500 hover:text-[#cccccc] transition-colors"
               >
-                {showSecret ? (
-                  <EyeOff className="w-4 h-4" />
-                ) : (
-                  <Eye className="w-4 h-4" />
-                )}
+                Didn't open? Click to open the browser again
+                <ExternalLink className="w-3 h-3 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
               </button>
             </div>
-          </div>
+          ) : (
+            <button
+              type="button"
+              onClick={handleSignIn}
+              disabled={phase === "starting"}
+              className={clsx(
+                "w-full bg-[#007acc] hover:bg-[#0062a3] text-white font-semibold py-2.5 rounded-md transition-all flex items-center justify-center gap-2 shadow-lg shadow-black/20",
+                phase === "starting" && "opacity-80 cursor-not-allowed"
+              )}
+            >
+              {phase === "starting" ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+              {phase === "starting" ? "Starting..." : "Sign in with Truncate Account"}
+            </button>
+          )}
 
           {/* Error Message */}
           {error && (
@@ -108,20 +103,7 @@ const LoginScreen: React.FC = () => {
               </p>
             </div>
           )}
-
-          {/* Sign In Button */}
-          <button
-            type="submit"
-            disabled={isLoading}
-            className={clsx(
-              "w-full bg-[#007acc] hover:bg-[#0062a3] text-white font-semibold py-2.5 rounded-md mt-4 transition-all flex items-center justify-center gap-2 shadow-lg shadow-black/20",
-              isLoading && "opacity-80 cursor-not-allowed"
-            )}
-          >
-            {isLoading && <Loader2 className="w-4 h-4 animate-spin" />}
-            {isLoading ? "Authenticating..." : "Authorize IDE"}
-          </button>
-        </form>
+        </div>
 
         {/* Secondary Link */}
         <div className="mt-8 flex flex-col items-center gap-2">
@@ -129,7 +111,7 @@ const LoginScreen: React.FC = () => {
             onClick={handleOpenSite}
             className="group flex items-center gap-1.5 text-[11px] text-gray-500 hover:text-[#cccccc] transition-colors"
           >
-            Find your secret key in portal
+            Don't have an account?
             <ExternalLink className="w-3 h-3 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
           </button>
           <span className="text-[10px] text-gray-600">account.truncateide.app</span>
